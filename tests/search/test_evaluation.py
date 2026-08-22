@@ -72,3 +72,28 @@ def test_central_knight_better_than_rim_knight() -> None:
         }
     )
     assert EvaluationFunction.evaluate(center) > EvaluationFunction.evaluate(rim)
+
+
+def test_higher_mobility_side_scores_better_with_equal_material() -> None:
+    cramped = _state(
+        {
+            "a1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "a2": Piece(type=PieceType.PAWN, color=Color.WHITE),
+            "b1": Piece(type=PieceType.PAWN, color=Color.WHITE),
+            "h8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "d5": Piece(type=PieceType.QUEEN, color=Color.BLACK),
+            "a8": Piece(type=PieceType.ROOK, color=Color.BLACK),
+        }
+    )
+    # Give white matching material but more open lines.
+    open_white = _state(
+        {
+            "a1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "d4": Piece(type=PieceType.QUEEN, color=Color.WHITE),
+            "h1": Piece(type=PieceType.ROOK, color=Color.WHITE),
+            "h8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "a7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+            "b7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+        }
+    )
+    assert EvaluationFunction.evaluate(open_white) > EvaluationFunction.evaluate(cramped)

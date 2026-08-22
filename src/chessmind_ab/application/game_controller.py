@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
 from chessmind_ab.domain.color import Color
@@ -18,6 +19,9 @@ from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.protocol import SearchAlgorithm
 from chessmind_ab.search.search_result import SearchResult
 
+# Centipawn window for near-best move variety in play mode only.
+_PLAY_DIVERSITY_WINDOW = 35
+
 
 @dataclass(frozen=True, slots=True)
 class MoveResult:
@@ -33,7 +37,11 @@ class GameController:
         ai_depth: int = 3,
         player_color: Color = Color.WHITE,
     ) -> None:
-        self._search = search or AlphaBetaSearch(move_ordering=MoveOrdering())
+        self._search = search or AlphaBetaSearch(
+            move_ordering=MoveOrdering(),
+            diversity_window=_PLAY_DIVERSITY_WINDOW,
+            rng=random.Random(),
+        )
         self._ai_depth = ai_depth
         self._player_color = player_color
         self._state = create_initial_game_state()
