@@ -38,3 +38,10 @@ def test_click_outside_board_rejected() -> None:
 def test_piece_glyph_maps_king() -> None:
     assert piece_glyph(Piece(type=PieceType.KING, color=Color.WHITE)) == "♔"
     assert piece_glyph(Piece(type=PieceType.KING, color=Color.BLACK)) == "♚"
+
+
+def test_format_status_prettifies_enum() -> None:
+    from chessmind_ab.domain.game_status import GameStatus
+    from chessmind_ab.presentation.gui import format_status
+
+    assert format_status(GameStatus.WHITE_WINS_CHECKMATE) == "White Wins Checkmate"
