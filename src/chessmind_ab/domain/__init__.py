@@ -9,6 +9,7 @@ from chessmind_ab.domain.move_type import MoveType
 from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import InvalidPositionError, Position
+from chessmind_ab.domain.pseudo_move_generator import PseudoMoveGenerator
 from chessmind_ab.domain.state_transition import (
     IllegalStateTransitionError,
     StateTransition,
@@ -29,5 +30,6 @@ __all__ = [
     "Piece",
     "PieceType",
     "Position",
+    "PseudoMoveGenerator",
     "StateTransition",
 ]
