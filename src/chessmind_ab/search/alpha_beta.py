@@ -14,6 +14,7 @@ from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.search.evaluation import EvaluationFunction
 from chessmind_ab.search.move_ordering import MoveOrdering
+from chessmind_ab.search.quiescence import quiescence
 from chessmind_ab.search.search_result import SearchResult
 from chessmind_ab.search.search_statistics import SearchStatistics
 from chessmind_ab.search.terminal import terminal_score
@@ -130,8 +131,15 @@ class AlphaBetaSearch:
             return terminal_score(status, distance_from_root)
 
         if depth == 0:
-            stats.evaluated_leaf_nodes += 1
-            return self._evaluation.evaluate(state)
+            return quiescence(
+                state,
+                alpha,
+                beta,
+                distance_from_root,
+                self._evaluation,
+                stats,
+                self._move_ordering,
+            )
 
         moves = LegalMoveGenerator.generate(state)
         if self._move_ordering is not None:

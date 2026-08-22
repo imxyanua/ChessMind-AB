@@ -12,6 +12,7 @@ from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
 from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.search.evaluation import EvaluationFunction
+from chessmind_ab.search.quiescence import quiescence
 from chessmind_ab.search.search_result import SearchResult
 from chessmind_ab.search.search_statistics import SearchStatistics
 from chessmind_ab.search.terminal import terminal_score
@@ -76,8 +77,15 @@ class MinimaxSearch:
             return terminal_score(status, distance_from_root)
 
         if depth == 0:
-            stats.evaluated_leaf_nodes += 1
-            return self._evaluation.evaluate(state)
+            return quiescence(
+                state,
+                float("-inf"),
+                float("inf"),
+                distance_from_root,
+                self._evaluation,
+                stats,
+                move_ordering=None,
+            )
 
         moves = LegalMoveGenerator.generate(state)
         stats.generated_moves += len(moves)
