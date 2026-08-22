@@ -12,6 +12,8 @@ from chessmind_ab.domain.game_status_evaluator import GameStatusEvaluator
 from chessmind_ab.domain.initial_position import create_initial_game_state
 from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
 from chessmind_ab.domain.move import Move
+from chessmind_ab.domain.piece import Piece
+from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
 from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.search.alpha_beta import AlphaBetaSearch
@@ -19,7 +21,6 @@ from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.protocol import SearchAlgorithm
 from chessmind_ab.search.search_result import SearchResult
 
-# Centipawn window for near-best move variety in play mode only.
 _PLAY_DIVERSITY_WINDOW = 35
 
 
@@ -28,6 +29,22 @@ class MoveResult:
     success: bool
     message: str
     state: GameState
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryEntry:
+    notation: str
+    move: Move
+    by_player: bool
+
+
+@dataclass(slots=True)
+class _Snapshot:
+    state: GameState
+    last_search: SearchResult | None
+    history: list[HistoryEntry]
+    captured_white: list[Piece]  # pieces captured BY white (black pieces)
+    captured_black: list[Piece]
 
 
 class GameController:
@@ -46,10 +63,18 @@ class GameController:
         self._player_color = player_color
         self._state = create_initial_game_state()
         self._last_search_result: SearchResult | None = None
+        self._history: list[HistoryEntry] = []
+        self._captured_by_white: list[Piece] = []
+        self._captured_by_black: list[Piece] = []
+        self._undo_stack: list[_Snapshot] = []
 
     def start_new_game(self) -> GameState:
         self._state = create_initial_game_state()
         self._last_search_result = None
+        self._history.clear()
+        self._captured_by_white.clear()
+        self._captured_by_black.clear()
+        self._undo_stack.clear()
         return self._state
 
     def get_state(self) -> GameState:
@@ -63,10 +88,63 @@ class GameController:
     def get_last_search_result(self) -> SearchResult | None:
         return self._last_search_result
 
+    def get_move_history(self) -> list[HistoryEntry]:
+        return list(self._history)
+
+    def get_captured_pieces(self, by_color: Color) -> list[Piece]:
+        if by_color is Color.WHITE:
+            return list(self._captured_by_white)
+        return list(self._captured_by_black)
+
+    def can_undo(self) -> bool:
+        return bool(self._undo_stack)
+
     def set_ai_depth(self, depth: int) -> None:
         if depth < 1:
             raise ValueError("depth must be >= 1")
         self._ai_depth = depth
+
+    def _push_undo_snapshot(self) -> None:
+        self._undo_stack.append(
+            _Snapshot(
+                state=self._state.copy(),
+                last_search=self._last_search_result,
+                history=list(self._history),
+                captured_white=list(self._captured_by_white),
+                captured_black=list(self._captured_by_black),
+            )
+        )
+
+    def undo(self) -> MoveResult:
+        if not self._undo_stack:
+            return MoveResult(False, "Nothing to undo", self._state)
+        snap = self._undo_stack.pop()
+        self._state = snap.state
+        self._last_search_result = snap.last_search
+        self._history = snap.history
+        self._captured_by_white = snap.captured_white
+        self._captured_by_black = snap.captured_black
+        return MoveResult(True, "Undone", self._state)
+
+    def _record_move(self, move: Move, by_player: bool) -> None:
+        notation = (
+            f"{move.from_position.to_chess_notation()}"
+            f"{move.to_position.to_chess_notation()}"
+        )
+        if move.promotion_piece is not None:
+            notation += f"={move.promotion_piece.name[0]}"
+        self._history.append(
+            HistoryEntry(notation=notation, move=move, by_player=by_player)
+        )
+        if move.captured_piece is not None:
+            if by_player:
+                self._captured_by_white.append(move.captured_piece)
+            else:
+                # AI is black when player is white.
+                if self._player_color is Color.WHITE:
+                    self._captured_by_black.append(move.captured_piece)
+                else:
+                    self._captured_by_white.append(move.captured_piece)
 
     def make_player_move(self, move: Move) -> MoveResult:
         if self._state.status is not GameStatus.ONGOING:
@@ -78,8 +156,10 @@ class GameController:
         if move not in legal:
             return MoveResult(False, "Illegal move", self._state)
 
+        self._push_undo_snapshot()
         self._state = StateTransition.apply(self._state, move)
         self._state.status = GameStatusEvaluator.evaluate(self._state)
+        self._record_move(move, by_player=True)
         return MoveResult(True, "OK", self._state)
 
     def make_player_move_from_notation(self, from_sq: str, to_sq: str) -> MoveResult:
@@ -102,7 +182,6 @@ class GameController:
         ]
         if not candidates:
             return MoveResult(False, "Illegal move", self._state)
-        # Prefer queen promotion when multiple promotion options exist.
         chosen = candidates[0]
         for move in candidates:
             if move.promotion_piece is not None and move.promotion_piece.name == "QUEEN":
@@ -122,6 +201,21 @@ class GameController:
             self._state.status = GameStatusEvaluator.evaluate(self._state)
             return MoveResult(False, "No AI move", self._state)
 
+        # Snapshot already taken on player move; AI continues from that branch.
+        # For undo of a full turn (player+AI), one snapshot before player is enough.
         self._state = StateTransition.apply(self._state, result.best_move)
         self._state.status = GameStatusEvaluator.evaluate(self._state)
+        self._record_move(result.best_move, by_player=False)
         return MoveResult(True, "AI moved", self._state)
+
+
+def material_sort_key(piece: Piece) -> int:
+    order = {
+        PieceType.QUEEN: 0,
+        PieceType.ROOK: 1,
+        PieceType.BISHOP: 2,
+        PieceType.KNIGHT: 3,
+        PieceType.PAWN: 4,
+        PieceType.KING: 5,
+    }
+    return order[piece.type]

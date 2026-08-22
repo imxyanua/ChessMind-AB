@@ -1,11 +1,11 @@
-"""Tkinter graphical UI for Player vs AI with polished board and info panel."""
+"""Tkinter GUI with PNG pieces, themes, captured list, moves, and undo."""
 
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from chessmind_ab.application.game_controller import GameController
+from chessmind_ab.application.game_controller import GameController, material_sort_key
 from chessmind_ab.domain.attack_detector import AttackDetector
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_status import GameStatus
@@ -14,7 +14,10 @@ from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import InvalidPositionError, Position
 from chessmind_ab.presentation.board_geometry import BoardGeometry
+from chessmind_ab.presentation.piece_images import PieceImageCache
+from chessmind_ab.presentation.themes import BOARD_THEMES, UI_THEMES, BoardTheme, UiTheme
 
+# Fallback glyphs if a sprite fails to load.
 _PIECE_GLYPHS = {
     (PieceType.KING, Color.WHITE): "♔",
     (PieceType.QUEEN, Color.WHITE): "♕",
@@ -30,19 +33,6 @@ _PIECE_GLYPHS = {
     (PieceType.PAWN, Color.BLACK): "♟",
 }
 
-# Visual theme
-_APP_BG = "#1b1d24"
-_PANEL_BG = "#252833"
-_CANVAS_BG = "#14161c"
-_LIGHT = "#ebecd0"
-_DARK = "#739552"
-_SELECT = "#f6f669"
-_LAST = "#cdd26a"
-_CHECK = "#e35d6a"
-_COORD = "#c8cdd8"
-_DOT = "#1f2421"
-_CAPTURE_RING = "#111111"
-
 
 def piece_glyph(piece: Piece) -> str:
     return _PIECE_GLYPHS[(piece.type, piece.color)]
@@ -57,9 +47,12 @@ class ChessGuiApp:
         self.root = root
         self.root.title("ChessMind-AB")
         self.root.resizable(False, False)
-        self.root.configure(bg=_APP_BG)
+
+        self.board_theme: BoardTheme = BOARD_THEMES["green"]
+        self.ui_theme: UiTheme = UI_THEMES["dark"]
 
         self.geometry = BoardGeometry(square_size=80, margin=32)
+        self.piece_images = PieceImageCache(self.geometry.square_size)
         self.controller = GameController(ai_depth=depth, player_color=Color.WHITE)
         self.controller.start_new_game()
 
@@ -71,48 +64,16 @@ class ChessGuiApp:
         self._ai_busy = False
         self._hover: Position | None = None
 
-        self._configure_style()
         self._build_layout(depth)
+        self._apply_theme_styles()
         self._redraw()
         self._refresh_panel()
 
-    def _configure_style(self) -> None:
-        style = ttk.Style(self.root)
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-        style.configure("App.TFrame", background=_APP_BG)
-        style.configure("Panel.TFrame", background=_PANEL_BG)
-        style.configure(
-            "Panel.TLabel",
-            background=_PANEL_BG,
-            foreground="#e8ecf4",
-            font=("Segoe UI", 10),
-        )
-        style.configure(
-            "Title.TLabel",
-            background=_PANEL_BG,
-            foreground="#ffffff",
-            font=("Segoe UI Semibold", 14),
-        )
-        style.configure(
-            "Muted.TLabel",
-            background=_PANEL_BG,
-            foreground="#9aa3b5",
-            font=("Segoe UI", 9),
-        )
-        style.configure(
-            "Accent.TButton",
-            font=("Segoe UI Semibold", 10),
-            padding=(12, 8),
-        )
-
     def _build_layout(self, depth: int) -> None:
-        shell = ttk.Frame(self.root, style="App.TFrame", padding=12)
-        shell.grid(row=0, column=0, sticky="nsew")
+        self.shell = tk.Frame(self.root, bg=self.ui_theme.app_bg, padx=12, pady=12)
+        self.shell.grid(row=0, column=0, sticky="nsew")
 
-        board_wrap = ttk.Frame(shell, style="App.TFrame")
+        board_wrap = tk.Frame(self.shell, bg=self.ui_theme.app_bg)
         board_wrap.grid(row=0, column=0, sticky="n")
 
         size = self.geometry.board_pixels + self.geometry.margin * 2
@@ -120,7 +81,7 @@ class ChessGuiApp:
             board_wrap,
             width=size,
             height=size,
-            background=_CANVAS_BG,
+            background=self.board_theme.canvas_bg,
             highlightthickness=0,
             bd=0,
         )
@@ -129,43 +90,110 @@ class ChessGuiApp:
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Leave>", self._on_leave)
 
-        panel = ttk.Frame(shell, style="Panel.TFrame", padding=16)
-        panel.grid(row=0, column=1, sticky="ns", padx=(14, 0))
-        panel.configure(width=260)
-        panel.grid_propagate(False)
+        self.panel = tk.Frame(self.shell, bg=self.ui_theme.panel_bg, padx=16, pady=16)
+        self.panel.grid(row=0, column=1, sticky="ns", padx=(14, 0))
+        self.panel.configure(width=300)
+        self.panel.grid_propagate(False)
 
-        ttk.Label(panel, text="ChessMind-AB", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(
-            panel,
+        self.title_label = tk.Label(
+            self.panel,
+            text="ChessMind-AB",
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+        )
+        self.title_label.pack(fill="x")
+        self.subtitle_label = tk.Label(
+            self.panel,
             text="Player (White) vs AI (Black)",
-            style="Muted.TLabel",
-        ).pack(anchor="w", pady=(0, 14))
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+            anchor="w",
+        )
+        self.subtitle_label.pack(fill="x", pady=(0, 10))
 
         self.turn_var = tk.StringVar(value="Turn: White")
         self.status_var = tk.StringVar(value="Status: Ongoing")
         self.last_move_var = tk.StringVar(value="Last move: —")
         self.ai_info_var = tk.StringVar(value="AI: waiting")
         self.stats_var = tk.StringVar(value="Nodes: — | Time: —")
-        self.hint_var = tk.StringVar(
-            value="Click a white piece, then a highlighted square."
-        )
+        self.hint_var = tk.StringVar(value="Click a white piece, then a marked square.")
+        self.captured_white_var = tk.StringVar(value="You captured: —")
+        self.captured_black_var = tk.StringVar(value="AI captured: —")
 
+        self._info_labels: list[tk.Label] = []
         for var in (
             self.turn_var,
             self.status_var,
             self.last_move_var,
             self.ai_info_var,
             self.stats_var,
+            self.captured_white_var,
+            self.captured_black_var,
         ):
-            ttk.Label(panel, textvariable=var, style="Panel.TLabel").pack(
-                anchor="w", pady=3
+            label = tk.Label(
+                self.panel,
+                textvariable=var,
+                bg=self.ui_theme.panel_bg,
+                fg=self.ui_theme.text,
+                font=("Segoe UI", 10),
+                anchor="w",
+                justify="left",
             )
+            label.pack(fill="x", pady=2)
+            self._info_labels.append(label)
 
-        ttk.Separator(panel).pack(fill="x", pady=12)
+        tk.Frame(self.panel, bg=self.ui_theme.muted, height=1).pack(fill="x", pady=10)
 
-        depth_row = ttk.Frame(panel, style="Panel.TFrame")
-        depth_row.pack(fill="x", pady=(0, 10))
-        ttk.Label(depth_row, text="AI depth", style="Panel.TLabel").pack(side=tk.LEFT)
+        theme_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        theme_row.pack(fill="x", pady=(0, 6))
+        tk.Label(
+            theme_row,
+            text="Board",
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI", 10),
+        ).pack(side=tk.LEFT)
+        self.board_theme_var = tk.StringVar(value="green")
+        ttk.Combobox(
+            theme_row,
+            textvariable=self.board_theme_var,
+            values=list(BOARD_THEMES.keys()),
+            width=8,
+            state="readonly",
+        ).pack(side=tk.RIGHT)
+        self.board_theme_var.trace_add("write", lambda *_: self._on_theme_changed())
+
+        ui_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        ui_row.pack(fill="x", pady=(0, 6))
+        tk.Label(
+            ui_row,
+            text="UI",
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI", 10),
+        ).pack(side=tk.LEFT)
+        self.ui_theme_var = tk.StringVar(value="dark")
+        ttk.Combobox(
+            ui_row,
+            textvariable=self.ui_theme_var,
+            values=list(UI_THEMES.keys()),
+            width=8,
+            state="readonly",
+        ).pack(side=tk.RIGHT)
+        self.ui_theme_var.trace_add("write", lambda *_: self._on_theme_changed())
+
+        depth_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        depth_row.pack(fill="x", pady=(0, 8))
+        tk.Label(
+            depth_row,
+            text="AI depth",
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI", 10),
+        ).pack(side=tk.LEFT)
         self.depth_var = tk.IntVar(value=depth)
         ttk.Spinbox(
             depth_row,
@@ -176,16 +204,73 @@ class ChessGuiApp:
             command=self._on_depth_changed,
         ).pack(side=tk.RIGHT)
 
-        ttk.Button(
-            panel,
-            text="New Game",
-            style="Accent.TButton",
-            command=self._on_new_game,
-        ).pack(fill="x", pady=(4, 12))
-
-        ttk.Label(panel, textvariable=self.hint_var, style="Muted.TLabel", wraplength=220).pack(
-            anchor="w"
+        btn_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        btn_row.pack(fill="x", pady=(4, 8))
+        ttk.Button(btn_row, text="New Game", command=self._on_new_game).pack(
+            side=tk.LEFT, expand=True, fill="x", padx=(0, 4)
         )
+        ttk.Button(btn_row, text="Undo", command=self._on_undo).pack(
+            side=tk.LEFT, expand=True, fill="x", padx=(4, 0)
+        )
+
+        tk.Label(
+            self.panel,
+            text="Move list",
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI Semibold", 10),
+            anchor="w",
+        ).pack(fill="x", pady=(6, 2))
+
+        list_frame = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        list_frame.pack(fill="both", expand=True)
+        self.move_list = tk.Listbox(
+            list_frame,
+            height=12,
+            activestyle="dotbox",
+            font=("Consolas", 10),
+            bg="#1f2330" if self.ui_theme.name == "dark" else "#f7f8fb",
+            fg=self.ui_theme.text,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.move_list.yview)
+        self.move_list.configure(yscrollcommand=scroll.set)
+        self.move_list.pack(side=tk.LEFT, fill="both", expand=True)
+        scroll.pack(side=tk.RIGHT, fill="y")
+
+        self.hint_label = tk.Label(
+            self.panel,
+            textvariable=self.hint_var,
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+            anchor="w",
+            justify="left",
+            wraplength=260,
+        )
+        self.hint_label.pack(fill="x", pady=(10, 0))
+
+    def _apply_theme_styles(self) -> None:
+        self.root.configure(bg=self.ui_theme.app_bg)
+        self.shell.configure(bg=self.ui_theme.app_bg)
+        self.panel.configure(bg=self.ui_theme.panel_bg)
+        self.canvas.configure(background=self.board_theme.canvas_bg)
+        for widget in (self.title_label, self.subtitle_label, self.hint_label, *self._info_labels):
+            widget.configure(bg=self.ui_theme.panel_bg)
+        self.title_label.configure(fg=self.ui_theme.text)
+        self.subtitle_label.configure(fg=self.ui_theme.muted)
+        self.hint_label.configure(fg=self.ui_theme.muted)
+        for label in self._info_labels:
+            label.configure(fg=self.ui_theme.text)
+        list_bg = "#1f2330" if self.ui_theme.name == "dark" else "#f7f8fb"
+        self.move_list.configure(bg=list_bg, fg=self.ui_theme.text)
+
+    def _on_theme_changed(self) -> None:
+        self.board_theme = BOARD_THEMES[self.board_theme_var.get()]
+        self.ui_theme = UI_THEMES[self.ui_theme_var.get()]
+        self._apply_theme_styles()
+        self._redraw()
 
     def _on_depth_changed(self) -> None:
         self.controller.set_ai_depth(int(self.depth_var.get()))
@@ -202,6 +287,24 @@ class ChessGuiApp:
         self._hover = None
         self._redraw()
         self._refresh_panel(message="New game started. White to move.")
+
+    def _on_undo(self) -> None:
+        if self._ai_busy:
+            return
+        result = self.controller.undo()
+        self.selected = None
+        self.target_squares.clear()
+        self.capture_targets.clear()
+        history = self.controller.get_move_history()
+        if history:
+            last = history[-1].move
+            self.last_from = last.from_position
+            self.last_to = last.to_position
+        else:
+            self.last_from = None
+            self.last_to = None
+        self._redraw()
+        self._refresh_panel(message=result.message)
 
     def _on_motion(self, event: tk.Event) -> None:
         if self._ai_busy:
@@ -230,7 +333,6 @@ class ChessGuiApp:
             return
         if state.side_to_move is not Color.WHITE:
             return
-
         try:
             clicked = self.geometry.pixels_to_position(event.x, event.y)
         except InvalidPositionError:
@@ -252,7 +354,6 @@ class ChessGuiApp:
             self._refresh_panel(message="Selection cleared.")
             return
 
-        # Clicking another own piece reselects.
         piece = state.board.get_piece(clicked)
         if piece is not None and piece.color is Color.WHITE:
             self._select_square(clicked)
@@ -273,9 +374,10 @@ class ChessGuiApp:
 
         self.last_from = source
         self.last_to = clicked
-        notation = f"{source.to_chess_notation()}{clicked.to_chess_notation()}"
         self._redraw()
-        self._refresh_panel(message=f"You played {notation}.")
+        self._refresh_panel(
+            message=f"You played {source.to_chess_notation()}{clicked.to_chess_notation()}."
+        )
         self._maybe_finish_or_ai()
 
     def _select_square(self, clicked: Position) -> None:
@@ -327,8 +429,7 @@ class ChessGuiApp:
             self._show_game_over()
 
     def _show_game_over(self) -> None:
-        status = self.controller.get_state().status
-        pretty = format_status(status)
+        pretty = format_status(self.controller.get_state().status)
         self._refresh_panel(message=f"Game over: {pretty}")
         messagebox.showinfo("Game over", pretty)
 
@@ -340,8 +441,11 @@ class ChessGuiApp:
             return state.board.find_king(state.side_to_move)
         return None
 
-    def _base_square_color(self, position: Position) -> str:
-        return _LIGHT if (position.row + position.column) % 2 == 0 else _DARK
+    def _format_captured(self, pieces: list[Piece]) -> str:
+        if not pieces:
+            return "—"
+        ordered = sorted(pieces, key=material_sort_key)
+        return " ".join(piece_glyph(piece) for piece in ordered)
 
     def _refresh_panel(self, message: str | None = None, ai_line: str | None = None) -> None:
         state = self.controller.get_state()
@@ -379,6 +483,24 @@ class ChessGuiApp:
         else:
             self.stats_var.set("Nodes: — | Time: —")
 
+        self.captured_white_var.set(
+            "You captured: "
+            + self._format_captured(self.controller.get_captured_pieces(Color.WHITE))
+        )
+        self.captured_black_var.set(
+            "AI captured: "
+            + self._format_captured(self.controller.get_captured_pieces(Color.BLACK))
+        )
+
+        self.move_list.delete(0, tk.END)
+        history = self.controller.get_move_history()
+        for index in range(0, len(history), 2):
+            white = history[index].notation
+            black = history[index + 1].notation if index + 1 < len(history) else ""
+            self.move_list.insert(tk.END, f"{index // 2 + 1}. {white}  {black}")
+        if history:
+            self.move_list.see(tk.END)
+
         if message is not None:
             self.hint_var.set(message)
 
@@ -386,8 +508,8 @@ class ChessGuiApp:
         self.canvas.delete("all")
         state = self.controller.get_state()
         checked = self._checked_king_square()
+        theme = self.board_theme
 
-        # Soft outer frame
         pad = 6
         self.canvas.create_rectangle(
             self.geometry.margin - pad,
@@ -403,23 +525,18 @@ class ChessGuiApp:
             for column in range(8):
                 position = Position(row=row, column=column)
                 x0, y0, x1, y1 = self.geometry.position_to_pixels(position)
-                color = self._base_square_color(position)
+                color = theme.light if (row + column) % 2 == 0 else theme.dark
                 if position == self.selected:
-                    color = _SELECT
+                    color = theme.select
                 elif position in {self.last_from, self.last_to}:
-                    color = _LAST
+                    color = theme.last
                 if checked is not None and position == checked:
-                    color = _CHECK
+                    color = theme.check
                 self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="")
 
                 if self._hover == position and position != self.selected:
                     self.canvas.create_rectangle(
-                        x0 + 2,
-                        y0 + 2,
-                        x1 - 2,
-                        y1 - 2,
-                        outline="#ffffff",
-                        width=2,
+                        x0 + 2, y0 + 2, x1 - 2, y1 - 2, outline="#ffffff", width=2
                     )
 
                 if column == 0:
@@ -427,7 +544,7 @@ class ChessGuiApp:
                         self.geometry.margin // 2,
                         (y0 + y1) // 2,
                         text=str(8 - row),
-                        fill=_COORD,
+                        fill=theme.coord,
                         font=("Segoe UI Semibold", 11),
                     )
                 if row == 7:
@@ -437,60 +554,36 @@ class ChessGuiApp:
                         + self.geometry.board_pixels
                         + self.geometry.margin // 2,
                         text=chr(ord("a") + column),
-                        fill=_COORD,
+                        fill=theme.coord,
                         font=("Segoe UI Semibold", 11),
                     )
 
-                # Legal move markers
                 if position in self.target_squares:
-                    cx = (x0 + x1) // 2
-                    cy = (y0 + y1) // 2
+                    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
                     if position in self.capture_targets:
                         self.canvas.create_oval(
-                            x0 + 8,
-                            y0 + 8,
-                            x1 - 8,
-                            y1 - 8,
-                            outline=_CAPTURE_RING,
-                            width=4,
+                            x0 + 8, y0 + 8, x1 - 8, y1 - 8, outline="#111111", width=4
                         )
                     else:
                         r = max(8, self.geometry.square_size // 6)
                         self.canvas.create_oval(
-                            cx - r,
-                            cy - r,
-                            cx + r,
-                            cy + r,
-                            fill=_DOT,
-                            outline="",
+                            cx - r, cy - r, cx + r, cy + r, fill="#1f2421", outline=""
                         )
 
                 piece = state.board.get_piece(position)
                 if piece is not None:
-                    cx = (x0 + x1) // 2
-                    cy = (y0 + y1) // 2
-                    glyph = piece_glyph(piece)
-                    font = ("Segoe UI Symbol", 42)
-                    # Outline for contrast on both light and dark squares.
-                    for dx, dy in (
-                        (-1, 0),
-                        (1, 0),
-                        (0, -1),
-                        (0, 1),
-                        (-1, -1),
-                        (1, 1),
-                        (-1, 1),
-                        (1, -1),
-                    ):
-                        self.canvas.create_text(
-                            cx + dx,
-                            cy + dy,
-                            text=glyph,
-                            fill="#000000",
-                            font=font,
+                    try:
+                        image = self.piece_images.get(piece)
+                        self.canvas.create_image(
+                            (x0 + x1) // 2, (y0 + y1) // 2, image=image
                         )
-                    fill = "#f8f8f8" if piece.color is Color.WHITE else "#1a1a1a"
-                    self.canvas.create_text(cx, cy, text=glyph, fill=fill, font=font)
+                    except Exception:
+                        self.canvas.create_text(
+                            (x0 + x1) // 2,
+                            (y0 + y1) // 2,
+                            text=piece_glyph(piece),
+                            font=("Segoe UI Symbol", 40),
+                        )
 
 
 def run_gui(depth: int = 3) -> None:

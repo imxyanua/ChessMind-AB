@@ -19,7 +19,7 @@ def test_invalid_player_move_is_rejected() -> None:
     controller.start_new_game()
     result = controller.make_player_move_from_notation("e2", "e5")
     assert result.success is False
-    assert "Illegal" in result.message or "Illegal move" == result.message
+    assert "Illegal" in result.message
     assert controller.get_state().ply_count == 0
 
 
@@ -33,3 +33,16 @@ def test_player_then_ai_turn_advances() -> None:
     assert ai.success is True
     assert controller.get_state().side_to_move is Color.WHITE
     assert controller.get_last_search_result() is not None
+    assert len(controller.get_move_history()) == 2
+
+
+def test_undo_restores_previous_turn() -> None:
+    controller = GameController(ai_depth=1)
+    controller.start_new_game()
+    controller.make_player_move_from_notation("e2", "e4")
+    controller.make_ai_move()
+    assert controller.can_undo()
+    undone = controller.undo()
+    assert undone.success is True
+    assert controller.get_state().ply_count == 0
+    assert controller.get_move_history() == []

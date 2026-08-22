@@ -23,6 +23,8 @@ def test_chess_gui_app_builds(tk_root) -> None:
     assert app.controller.get_state().ply_count == 0
     assert app.canvas.winfo_exists() == 1
     assert app.turn_var.get().startswith("Turn:")
-    assert "Ongoing" in app.status_var.get() or "ONGOING" in app.status_var.get()
+    assert "Ongoing" in app.status_var.get()
     app._refresh_panel(message="Ready")
     assert app.hint_var.get() == "Ready"
+    assert app.board_theme_var.get() in {"green", "wood"}
+    assert app.ui_theme_var.get() in {"dark", "light"}

@@ -13,13 +13,16 @@ authors = [{ name = "ChessMind-AB" }]
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "Pillow>=10.0"]
 
 [project.scripts]
 chessmind-ab = "chessmind_ab.presentation.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+chessmind_ab = ["assets/pieces/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -6,7 +6,8 @@ ChessMind-AB is a chess simulation project that applies Minimax with Alpha-Beta 
 
 - Python 3.11+
 - pytest
-- tkinter (graphical UI, included with standard Python on Windows)
+- tkinter GUI with PNG piece sprites
+- Pillow (optional, only to regenerate piece sprites)
 
 ## Setup
 
@@ -20,7 +21,7 @@ python -m pip install -e ".[dev]"
 python -m chessmind_ab gui
 ```
 
-or simply:
+or:
 
 ```bash
 python -m chessmind_ab
@@ -36,9 +37,16 @@ How to play:
 
 1. A window opens with the chess board and an info panel.
 2. Click a white piece, then click a marked destination (dot/ring).
-3. The AI (Black) replies automatically; panel shows last move, score, nodes, time.
-4. Use **New Game** to restart; change **AI depth** (1-5) as needed.
-5. In play mode the AI may vary among near-equal best moves, so games feel less repetitive.
+3. The AI (Black) replies automatically.
+4. Use the panel to switch **Board/UI themes**, change **AI depth**, view **captured pieces** and **move list**.
+5. **Undo** reverts the last player+AI turn.
+6. In play mode the AI may vary among near-equal best moves.
+
+Regenerate piece sprites (optional):
+
+```bash
+python scripts/generate_piece_sprites.py
+```
 
 ## Run tests
 
@@ -57,9 +65,10 @@ python -m chessmind_ab play --depth 2
 
 ```text
 src/chessmind_ab/
+  assets/pieces/   # PNG sprites
   domain/
   search/
   application/
-  presentation/   # gui.py + cli.py
+  presentation/
 tests/
 ```
