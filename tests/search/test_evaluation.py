@@ -1,4 +1,4 @@
-"""Unit tests for EvaluationFunction V2 (material + PST)."""
+"""Unit tests for EvaluationFunction V2 (material + PST + mobility + king safety)."""
 
 from chessmind_ab.domain.board import Board
 from chessmind_ab.domain.color import Color
@@ -7,7 +7,7 @@ from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
-from chessmind_ab.search.evaluation import EvaluationFunction
+from chessmind_ab.search.evaluation import EvaluationFunction, king_safety_score
 
 
 def _state(pieces: dict[str, Piece]) -> GameState:
@@ -112,3 +112,42 @@ def test_higher_mobility_side_scores_better_with_equal_material() -> None:
         }
     )
     assert EvaluationFunction.evaluate(open_white) > EvaluationFunction.evaluate(cramped)
+
+
+def test_pawn_shield_improves_king_safety() -> None:
+    bare = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+        }
+    )
+    shielded = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "d2": Piece(type=PieceType.PAWN, color=Color.WHITE),
+            "e2": Piece(type=PieceType.PAWN, color=Color.WHITE),
+            "f2": Piece(type=PieceType.PAWN, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+        }
+    )
+    assert king_safety_score(shielded) > king_safety_score(bare)
+    assert EvaluationFunction.evaluate(shielded) > EvaluationFunction.evaluate(bare)
+
+
+def test_enemy_queen_near_king_worsens_safety() -> None:
+    safe = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "a8": Piece(type=PieceType.QUEEN, color=Color.BLACK),
+        }
+    )
+    pressured = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "e3": Piece(type=PieceType.QUEEN, color=Color.BLACK),
+        }
+    )
+    assert king_safety_score(pressured) < king_safety_score(safe)
+    assert EvaluationFunction.evaluate(pressured) < EvaluationFunction.evaluate(safe)
