@@ -68,3 +68,15 @@ def test_board_polish_redraw_keeps_theme_fields(tk_root) -> None:
     app._redraw()
     assert app.canvas.find_all()
     assert app.controller.get_state().side_to_move is Color.WHITE
+
+
+def test_wider_three_column_layout(tk_root) -> None:
+    app = ChessGuiApp(tk_root, difficulty_key="beginner")
+    assert app.panel.winfo_exists() == 1
+    assert app.history_panel.winfo_exists() == 1
+    assert int(app.panel.cget("width")) >= 280
+    assert int(app.history_panel.cget("width")) >= 260
+    assert int(app.move_list.cget("height")) >= 20
+    app.ui_theme_var.set("light")
+    app._on_theme_changed()
+    assert app.history_panel.cget("bg") == app.ui_theme.panel_bg
