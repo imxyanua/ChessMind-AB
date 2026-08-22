@@ -1,11 +1,17 @@
 """Asset and theme smoke tests."""
 
-from pathlib import Path
+import tkinter as tk
+
+import pytest
 
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
-from chessmind_ab.presentation.piece_images import assets_dir, piece_filename
+from chessmind_ab.presentation.piece_images import (
+    PieceImageCache,
+    assets_dir,
+    piece_filename,
+)
 from chessmind_ab.presentation.themes import BOARD_THEMES, UI_THEMES
 
 
@@ -23,3 +29,27 @@ def test_all_piece_sprites_exist() -> None:
 def test_theme_packs_available() -> None:
     assert set(BOARD_THEMES) >= {"green", "wood"}
     assert set(UI_THEMES) >= {"dark", "light"}
+    for theme in BOARD_THEMES.values():
+        assert theme.frame
+        assert theme.frame_border
+        assert theme.hover
+        assert theme.hint
+        assert theme.hint_capture
+
+
+def test_piece_image_cache_loads_with_shadow() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk not available: {exc}")
+    root.withdraw()
+    try:
+        cache = PieceImageCache(square_size=88)
+        piece = Piece(type=PieceType.KNIGHT, color=Color.WHITE)
+        image = cache.get(piece)
+        assert int(image.width()) >= 80
+        assert int(image.height()) >= 80
+        again = cache.get(piece)
+        assert again is image
+    finally:
+        root.destroy()

@@ -64,7 +64,7 @@ class ChessGuiApp:
         self.board_theme: BoardTheme = BOARD_THEMES["green"]
         self.ui_theme: UiTheme = UI_THEMES["dark"]
 
-        self.geometry = BoardGeometry(square_size=84, margin=34)
+        self.geometry = BoardGeometry(square_size=88, margin=36)
         self.piece_images = PieceImageCache(self.geometry.square_size)
         self.controller = GameController(
             difficulty_key=difficulty_key, player_color=Color.WHITE
@@ -747,67 +747,107 @@ class ChessGuiApp:
         state = self.controller.get_state()
         checked = self._checked_king_square()
         theme = self.board_theme
+        margin = self.geometry.margin
+        board = self.geometry.board_pixels
 
-        pad = 8
+        # Outer frame + inner bevel around the 8x8 grid.
+        outer = 12
         self.canvas.create_rectangle(
-            self.geometry.margin - pad,
-            self.geometry.margin - pad,
-            self.geometry.margin + self.geometry.board_pixels + pad,
-            self.geometry.margin + self.geometry.board_pixels + pad,
-            fill="#0c0e14",
-            outline="#4a5163",
+            margin - outer,
+            margin - outer,
+            margin + board + outer,
+            margin + board + outer,
+            fill=theme.frame,
+            outline=theme.frame_border,
             width=2,
+        )
+        self.canvas.create_rectangle(
+            margin - 3,
+            margin - 3,
+            margin + board + 3,
+            margin + board + 3,
+            fill="",
+            outline=theme.frame_border,
+            width=1,
         )
 
         for row in range(8):
             for column in range(8):
                 position = Position(row=row, column=column)
                 x0, y0, x1, y1 = self.geometry.position_to_pixels(position)
-                color = theme.light if (row + column) % 2 == 0 else theme.dark
-                if position == self.selected:
-                    color = theme.select
-                elif position in {self.last_from, self.last_to}:
-                    color = theme.last
-                if self._flash_to is not None and position == self._flash_to:
-                    color = theme.select
+                base = theme.light if (row + column) % 2 == 0 else theme.dark
+                self.canvas.create_rectangle(x0, y0, x1, y1, fill=base, outline="")
+
+                # Soft overlays keep the square identity while highlighting.
+                if position in {self.last_from, self.last_to}:
+                    self.canvas.create_rectangle(
+                        x0, y0, x1, y1, fill=theme.last, outline="", stipple="gray50"
+                    )
+                if position == self.selected or (
+                    self._flash_to is not None and position == self._flash_to
+                ):
+                    self.canvas.create_rectangle(
+                        x0, y0, x1, y1, fill=theme.select, outline="", stipple="gray50"
+                    )
+                    self.canvas.create_rectangle(
+                        x0 + 2, y0 + 2, x1 - 2, y1 - 2, outline=theme.select, width=2
+                    )
                 if checked is not None and position == checked:
-                    color = theme.check
-                self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="")
+                    self.canvas.create_rectangle(
+                        x0, y0, x1, y1, fill=theme.check, outline="", stipple="gray50"
+                    )
+                    self.canvas.create_rectangle(
+                        x0 + 3, y0 + 3, x1 - 3, y1 - 3, outline=theme.check, width=3
+                    )
 
                 if self._hover == position and position != self.selected:
                     self.canvas.create_rectangle(
-                        x0 + 2, y0 + 2, x1 - 2, y1 - 2, outline="#ffffff", width=2
+                        x0 + 2,
+                        y0 + 2,
+                        x1 - 2,
+                        y1 - 2,
+                        outline=theme.hover,
+                        width=2,
                     )
 
                 if column == 0:
                     self.canvas.create_text(
-                        self.geometry.margin // 2,
+                        margin // 2,
                         (y0 + y1) // 2,
                         text=str(8 - row),
                         fill=theme.coord,
-                        font=("Segoe UI Semibold", 11),
+                        font=("Segoe UI Semibold", 12),
                     )
                 if row == 7:
                     self.canvas.create_text(
                         (x0 + x1) // 2,
-                        self.geometry.margin
-                        + self.geometry.board_pixels
-                        + self.geometry.margin // 2,
+                        margin + board + margin // 2,
                         text=chr(ord("a") + column),
                         fill=theme.coord,
-                        font=("Segoe UI Semibold", 11),
+                        font=("Segoe UI Semibold", 12),
                     )
 
                 if position in self.target_squares:
                     cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
                     if position in self.capture_targets:
+                        inset = max(7, self.geometry.square_size // 10)
                         self.canvas.create_oval(
-                            x0 + 8, y0 + 8, x1 - 8, y1 - 8, outline="#111111", width=4
+                            x0 + inset,
+                            y0 + inset,
+                            x1 - inset,
+                            y1 - inset,
+                            outline=theme.hint_capture,
+                            width=3,
                         )
                     else:
-                        r = max(8, self.geometry.square_size // 6)
+                        r = max(7, self.geometry.square_size // 7)
                         self.canvas.create_oval(
-                            cx - r, cy - r, cx + r, cy + r, fill="#1f2421", outline=""
+                            cx - r,
+                            cy - r,
+                            cx + r,
+                            cy + r,
+                            fill=theme.hint,
+                            outline="",
                         )
 
                 if position in self._hidden_positions:
@@ -818,14 +858,14 @@ class ChessGuiApp:
                     try:
                         image = self.piece_images.get(piece)
                         self.canvas.create_image(
-                            (x0 + x1) // 2, (y0 + y1) // 2, image=image
+                            (x0 + x1) // 2, (y0 + y1) // 2 + 1, image=image
                         )
                     except Exception:
                         self.canvas.create_text(
                             (x0 + x1) // 2,
                             (y0 + y1) // 2,
                             text=piece_glyph(piece),
-                            font=("Segoe UI Symbol", 40),
+                            font=("Segoe UI Symbol", 42),
                         )
 
 

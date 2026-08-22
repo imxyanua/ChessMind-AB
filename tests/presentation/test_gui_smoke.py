@@ -4,6 +4,8 @@ import tkinter as tk
 
 import pytest
 
+from chessmind_ab.domain.color import Color
+from chessmind_ab.domain.position import Position
 from chessmind_ab.presentation.gui import ChessGuiApp
 
 
@@ -51,3 +53,18 @@ def test_pgn_and_undo_controls_exist(tk_root) -> None:
     assert '[Event "ChessMind-AB Game"]' in pgn
     app._on_copy_pgn()
     assert "clipboard" in app.hint_var.get().lower() or "PGN" in app.hint_var.get()
+
+
+def test_board_polish_redraw_keeps_theme_fields(tk_root) -> None:
+    app = ChessGuiApp(tk_root, difficulty_key="beginner")
+    assert app.geometry.square_size == 88
+    assert app.board_theme.frame_border
+    app.last_from = Position.from_chess_notation("e2")
+    app.last_to = Position.from_chess_notation("e4")
+    app.selected = Position.from_chess_notation("g1")
+    app._hover = Position.from_chess_notation("f3")
+    app.target_squares = {Position.from_chess_notation("f3")}
+    app.capture_targets = {Position.from_chess_notation("e5")}
+    app._redraw()
+    assert app.canvas.find_all()
+    assert app.controller.get_state().side_to_move is Color.WHITE

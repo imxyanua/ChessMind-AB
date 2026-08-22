@@ -15,6 +15,11 @@ class BoardTheme:
     check: str
     canvas_bg: str
     coord: str
+    frame: str
+    frame_border: str
+    hover: str
+    hint: str
+    hint_capture: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,13 +35,18 @@ class UiTheme:
 BOARD_THEMES = {
     "green": BoardTheme(
         name="green",
-        light="#ebecd0",
-        dark="#739552",
-        select="#f6f669",
+        light="#f0f1d6",
+        dark="#769656",
+        select="#f7f769",
         last="#cdd26a",
         check="#e35d6a",
-        canvas_bg="#14161c",
-        coord="#c8cdd8",
+        canvas_bg="#12141a",
+        coord="#d5dae6",
+        frame="#1a1e28",
+        frame_border="#5a6478",
+        hover="#ffffff",
+        hint="#1f2a24",
+        hint_capture="#111111",
     ),
     "wood": BoardTheme(
         name="wood",
@@ -45,8 +55,13 @@ BOARD_THEMES = {
         select="#f6f669",
         last="#e6c07b",
         check="#d94848",
-        canvas_bg="#2a2118",
-        coord="#e8dcc8",
+        canvas_bg="#241c14",
+        coord="#efe4d2",
+        frame="#2f241a",
+        frame_border="#8a6f52",
+        hover="#ffffff",
+        hint="#3a2a1c",
+        hint_capture="#1a120c",
     ),
 }
 
