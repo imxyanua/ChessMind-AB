@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import tkinter as tk
@@ -33,6 +34,7 @@ class PieceImageCache:
     def __init__(self, square_size: int) -> None:
         self._square_size = square_size
         self._images: dict[str, tk.PhotoImage] = {}
+        self._temp_files: list[Path] = []
 
     def get(self, piece: Piece) -> tk.PhotoImage:
         key = f"{piece.color.name}:{piece.type.name}:{self._square_size}"
@@ -44,12 +46,30 @@ class PieceImageCache:
         if not path.exists():
             raise FileNotFoundError(f"Missing piece sprite: {path}")
 
-        image = tk.PhotoImage(file=str(path))
-        # PhotoImage subsample/zoom only supports integers; approximate size.
-        target = max(24, self._square_size - 12)
-        # Scale down from 128px source using subsample.
-        factor = max(1, round(128 / target))
-        if factor > 1:
-            image = image.subsample(factor, factor)
+        target = max(24, self._square_size - 10)
+        image = self._load_scaled(path, target)
         self._images[key] = image
         return image
+
+    def _load_scaled(self, path: Path, target: int) -> tk.PhotoImage:
+        try:
+            from PIL import Image
+
+            src = Image.open(path).convert("RGBA")
+            if src.size != (target, target):
+                src = src.resize((target, target), Image.Resampling.LANCZOS)
+            tmp = Path(tempfile.mkstemp(suffix=".png")[1])
+            src.save(tmp)
+            self._temp_files.append(tmp)
+            return tk.PhotoImage(file=str(tmp))
+        except Exception:
+            # Fallback without Pillow: nearest-neighbor via zoom/subsample.
+            image = tk.PhotoImage(file=str(path))
+            width = max(1, int(image.width()))
+            if width == target:
+                return image
+            if width < target:
+                factor = max(1, target // width)
+                return image.zoom(factor, factor)
+            factor = max(1, width // target)
+            return image.subsample(factor, factor)
