@@ -1,5 +1,6 @@
 """Chess domain package."""
 
+from chessmind_ab.domain.attack_detector import AttackDetector
 from chessmind_ab.domain.board import Board, KingNotFoundError
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState, InvalidGameStateError
@@ -16,6 +17,7 @@ from chessmind_ab.domain.state_transition import (
 )
 
 __all__ = [
+    "AttackDetector",
     "Board",
     "Color",
     "GameState",
