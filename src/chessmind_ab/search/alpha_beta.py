@@ -1,4 +1,4 @@
-"""Minimax search with WHITE=MAX and BLACK=MIN."""
+"""Alpha-Beta search equivalent to Minimax with pruning."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from chessmind_ab.search.search_statistics import SearchStatistics
 from chessmind_ab.search.terminal import terminal_score
 
 
-class MinimaxSearch:
+class AlphaBetaSearch:
     def __init__(self, evaluation: EvaluationFunction | None = None) -> None:
         self._evaluation = evaluation or EvaluationFunction()
 
@@ -41,18 +41,23 @@ class MinimaxSearch:
         moves = LegalMoveGenerator.generate(state)
         stats.generated_moves += len(moves)
         best_move: Move | None = None
+        alpha = float("-inf")
+        beta = float("inf")
         best_score = float("-inf") if state.side_to_move is Color.WHITE else float("inf")
 
         for move in moves:
             child = StateTransition.apply(state, move)
-            score = self._search(child, depth - 1, 1, stats)
+            score = self._search(child, depth - 1, 1, alpha, beta, stats)
             if state.side_to_move is Color.WHITE:
                 if score > best_score:
                     best_score = score
                     best_move = move
-            elif score < best_score:
-                best_score = score
-                best_move = move
+                alpha = max(alpha, best_score)
+            else:
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+                beta = min(beta, best_score)
 
         stats.max_depth_reached = depth
         stats.execution_time_ms = (time.perf_counter() - started) * 1000
@@ -67,6 +72,8 @@ class MinimaxSearch:
         state: GameState,
         depth: int,
         distance_from_root: int,
+        alpha: float,
+        beta: float,
         stats: SearchStatistics,
     ) -> int:
         stats.nodes_visited += 1
@@ -81,21 +88,33 @@ class MinimaxSearch:
 
         moves = LegalMoveGenerator.generate(state)
         stats.generated_moves += len(moves)
+
         if state.side_to_move is Color.WHITE:
             best = float("-inf")
-            for move in moves:
+            for index, move in enumerate(moves):
                 child = StateTransition.apply(state, move)
-                best = max(
-                    best,
-                    self._search(child, depth - 1, distance_from_root + 1, stats),
+                score = self._search(
+                    child, depth - 1, distance_from_root + 1, alpha, beta, stats
                 )
+                best = max(best, score)
+                alpha = max(alpha, best)
+                if alpha >= beta:
+                    # Count a cutoff only when at least one later sibling is skipped.
+                    if index < len(moves) - 1:
+                        stats.cutoffs += 1
+                    break
             return int(best)
 
         best = float("inf")
-        for move in moves:
+        for index, move in enumerate(moves):
             child = StateTransition.apply(state, move)
-            best = min(
-                best,
-                self._search(child, depth - 1, distance_from_root + 1, stats),
+            score = self._search(
+                child, depth - 1, distance_from_root + 1, alpha, beta, stats
             )
+            best = min(best, score)
+            beta = min(beta, best)
+            if alpha >= beta:
+                if index < len(moves) - 1:
+                    stats.cutoffs += 1
+                break
         return int(best)
