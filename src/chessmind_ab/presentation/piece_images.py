@@ -20,6 +20,8 @@ _TYPE_NAMES = {
     PieceType.KING: "king",
 }
 
+_SHADOW_PAD = 5
+
 
 def assets_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "pieces"
@@ -37,7 +39,7 @@ class PieceImageCache:
         self._temp_files: list[Path] = []
 
     def get(self, piece: Piece) -> tk.PhotoImage:
-        key = f"{piece.color.name}:{piece.type.name}:{self._square_size}"
+        key = f"{piece.color.name}:{piece.type.name}:{self._square_size}:shadow"
         cached = self._images.get(key)
         if cached is not None:
             return cached
@@ -46,20 +48,32 @@ class PieceImageCache:
         if not path.exists():
             raise FileNotFoundError(f"Missing piece sprite: {path}")
 
-        target = max(24, self._square_size - 10)
+        # Leave a little margin inside the square for shadow room.
+        target = max(28, self._square_size - 6)
         image = self._load_scaled(path, target)
         self._images[key] = image
         return image
 
     def _load_scaled(self, path: Path, target: int) -> tk.PhotoImage:
         try:
-            from PIL import Image
+            from PIL import Image, ImageFilter
 
             src = Image.open(path).convert("RGBA")
             if src.size != (target, target):
                 src = src.resize((target, target), Image.Resampling.LANCZOS)
+
+            canvas_size = target + _SHADOW_PAD * 2
+            canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+
+            alpha = src.split()[3]
+            shadow = Image.new("RGBA", (target, target), (0, 0, 0, 0))
+            shadow.putalpha(alpha.point(lambda value: int(value * 0.42)))
+            shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2))
+            canvas.paste(shadow, (_SHADOW_PAD + 2, _SHADOW_PAD + 3), shadow)
+            canvas.paste(src, (_SHADOW_PAD, _SHADOW_PAD), src)
+
             tmp = Path(tempfile.mkstemp(suffix=".png")[1])
-            src.save(tmp)
+            canvas.save(tmp)
             self._temp_files.append(tmp)
             return tk.PhotoImage(file=str(tmp))
         except Exception:
