@@ -83,8 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         "command",
         nargs="?",
         default="gui",
-        choices=["gui", "demo", "play", "benchmark"],
-        help="gui/demo/play/benchmark",
+        choices=["gui", "demo", "play", "benchmark", "report"],
+        help="gui/demo/play/benchmark/report",
     )
     parser.add_argument(
         "--difficulty",
@@ -104,6 +104,18 @@ def main(argv: list[str] | None = None) -> int:
         type=str,
         default="benchmark_results.csv",
         help="CSV output path for benchmark command",
+    )
+    parser.add_argument(
+        "--report-dir",
+        type=str,
+        default="experiment_out",
+        help="Output directory for report command (CSV + Markdown)",
+    )
+    parser.add_argument(
+        "--depths",
+        type=str,
+        default="1,2",
+        help="Comma-separated depths for report command (default: 1,2)",
     )
     args = parser.parse_args(argv)
 
@@ -132,6 +144,28 @@ def main(argv: list[str] | None = None) -> int:
         print(format_benchmark_table(rows))
         out = write_benchmark_csv(rows, Path(args.out))
         print(f"\nWrote CSV: {out.resolve()}")
+        return 0
+
+    if args.command == "report":
+        from pathlib import Path
+
+        from chessmind_ab.search.experiment_report import write_report
+
+        depths = [int(part.strip()) for part in args.depths.split(",") if part.strip()]
+        if args.depth is not None:
+            depths = [args.depth]
+        csv_path, md_path, report = write_report(Path(args.report_dir), depths=depths)
+        print(f"Wrote CSV: {csv_path.resolve()}")
+        print(f"Wrote Markdown: {md_path.resolve()}")
+        for hyp in report.hypotheses:
+            verdict = (
+                "SUPPORTED"
+                if hyp.supported is True
+                else "NOT SUPPORTED"
+                if hyp.supported is False
+                else "INCONCLUSIVE"
+            )
+            print(f"{hyp.key}: {verdict} — {hyp.detail}")
         return 0
 
     controller = GameController(

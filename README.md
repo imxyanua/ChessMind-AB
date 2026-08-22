@@ -65,12 +65,18 @@ python -m chessmind_ab demo
 python -m chessmind_ab play --depth 2
 ```
 
-## Benchmark report
+## Benchmark / experimental report
 
 Compare Minimax / AlphaBeta / AlphaBeta+Ordering (deterministic):
 
 ```bash
 python -m chessmind_ab benchmark --depth 2 --out benchmark_results.csv
+```
+
+Generate thesis-style CSV + Markdown (hypotheses H1–H5):
+
+```bash
+python -m chessmind_ab report --depths 1,2 --report-dir experiment_out
 ```
 
 Use depth 1-2 for quick runs; higher depths get slow because of quiescence.
