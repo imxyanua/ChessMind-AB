@@ -23,6 +23,11 @@ docs/
 .tmp-issues/
 _issue_bodies/
 
+# Generated experiment / benchmark outputs
+experiment_out/
+benchmark_results.csv
+*.pgn
+
 # OS / IDE
 .DS_Store
 Thumbs.db
