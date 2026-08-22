@@ -3,6 +3,7 @@
 from chessmind_ab.search.alpha_beta import AlphaBetaSearch
 from chessmind_ab.search.evaluation import EvaluationFunction
 from chessmind_ab.search.minimax import MinimaxSearch
+from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.protocol import SearchAlgorithm
 from chessmind_ab.search.search_result import SearchResult
 from chessmind_ab.search.search_statistics import SearchStatistics
@@ -11,6 +12,7 @@ __all__ = [
     "AlphaBetaSearch",
     "EvaluationFunction",
     "MinimaxSearch",
+    "MoveOrdering",
     "SearchAlgorithm",
     "SearchResult",
     "SearchStatistics",
