@@ -1,4 +1,4 @@
-"""Evaluation V2: material + piece-square tables."""
+"""Evaluation V2: material + PST + mobility + king safety."""
 
 from __future__ import annotations
 
@@ -100,8 +100,55 @@ def _pst_value(piece_type: PieceType, color: Color, row: int, column: int) -> in
     return table[7 - row][column]
 
 
-# Small weight so mobility nudges style without overpowering material/PST.
+# Small weights so style terms nudge without overpowering material/PST.
 _MOBILITY_WEIGHT = 4
+_KING_SAFETY_WEIGHT = 1
+
+# Enemy proximity penalties inside the king's Chebyshev-2 zone.
+_ZONE_DANGER = {
+    PieceType.QUEEN: 18,
+    PieceType.ROOK: 12,
+    PieceType.BISHOP: 8,
+    PieceType.KNIGHT: 8,
+    PieceType.PAWN: 5,
+    PieceType.KING: 2,
+}
+
+_PAWN_SHIELD_BONUS = 10
+
+
+def _king_safety_for_side(state: GameState, color: Color) -> int:
+    """Higher is safer for ``color`` (pawn shield minus nearby enemy pressure)."""
+    king = state.board.find_king(color)
+    forward = -1 if color is Color.WHITE else 1
+    safety = 0
+
+    for delta_file in (-1, 0, 1):
+        column = king.column + delta_file
+        row = king.row + forward
+        if not (0 <= row < 8 and 0 <= column < 8):
+            continue
+        piece = state.board.get_piece(Position(row=row, column=column))
+        if piece is not None and piece.color is color and piece.type is PieceType.PAWN:
+            safety += _PAWN_SHIELD_BONUS
+
+    for row in range(8):
+        for column in range(8):
+            piece = state.board.get_piece(Position(row=row, column=column))
+            if piece is None or piece.color is color:
+                continue
+            distance = max(abs(row - king.row), abs(column - king.column))
+            if distance == 0 or distance > 2:
+                continue
+            safety -= _ZONE_DANGER.get(piece.type, 0)
+    return safety
+
+
+def king_safety_score(state: GameState) -> int:
+    """White-minus-black king-safety term (positive favors White)."""
+    return _king_safety_for_side(state, Color.WHITE) - _king_safety_for_side(
+        state, Color.BLACK
+    )
 
 
 class EvaluationFunction:
@@ -124,4 +171,5 @@ class EvaluationFunction:
         white_mobility = len(PseudoMoveGenerator.generate(state, Color.WHITE))
         black_mobility = len(PseudoMoveGenerator.generate(state, Color.BLACK))
         score += _MOBILITY_WEIGHT * (white_mobility - black_mobility)
+        score += _KING_SAFETY_WEIGHT * king_safety_score(state)
         return score
