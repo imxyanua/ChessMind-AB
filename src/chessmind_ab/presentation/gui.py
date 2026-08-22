@@ -40,7 +40,7 @@ def piece_glyph(piece: Piece) -> str:
 
 
 class ChessGuiApp:
-    def __init__(self, root: tk.Tk, depth: int = 2) -> None:
+    def __init__(self, root: tk.Tk, depth: int = 3) -> None:
         self.root = root
         self.root.title("ChessMind-AB")
         self.root.resizable(False, False)
@@ -70,7 +70,7 @@ class ChessGuiApp:
         ttk.Spinbox(
             toolbar,
             from_=1,
-            to=4,
+            to=5,
             width=4,
             textvariable=self.depth_var,
             command=self._on_depth_changed,
@@ -248,7 +248,7 @@ class ChessGuiApp:
                 self.status_var.set("White to move")
 
 
-def run_gui(depth: int = 2) -> None:
+def run_gui(depth: int = 3) -> None:
     root = tk.Tk()
     ChessGuiApp(root, depth=depth)
     root.mainloop()

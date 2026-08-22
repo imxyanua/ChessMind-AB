@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         choices=["gui", "demo", "play"],
         help="gui = graphical window (default); demo/play = terminal helpers",
     )
-    parser.add_argument("--depth", type=int, default=2)
+    parser.add_argument("--depth", type=int, default=3)
     args = parser.parse_args(argv)
 
     if args.command == "gui":

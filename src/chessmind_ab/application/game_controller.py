@@ -30,7 +30,7 @@ class GameController:
     def __init__(
         self,
         search: SearchAlgorithm | None = None,
-        ai_depth: int = 2,
+        ai_depth: int = 3,
         player_color: Color = Color.WHITE,
     ) -> None:
         self._search = search or AlphaBetaSearch(move_ordering=MoveOrdering())
