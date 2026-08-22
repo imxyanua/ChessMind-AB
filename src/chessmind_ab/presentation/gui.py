@@ -91,7 +91,7 @@ class ChessGuiApp:
         self._refresh_panel()
 
     def _build_layout(self) -> None:
-        self.shell = tk.Frame(self.root, bg=self.ui_theme.app_bg, padx=14, pady=14)
+        self.shell = tk.Frame(self.root, bg=self.ui_theme.app_bg, padx=16, pady=16)
         self.shell.grid(row=0, column=0, sticky="nsew")
 
         board_wrap = tk.Frame(self.shell, bg=self.ui_theme.app_bg)
@@ -111,10 +111,21 @@ class ChessGuiApp:
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Leave>", self._on_leave)
 
+        # Column 2: game info / controls
         self.panel = tk.Frame(self.shell, bg=self.ui_theme.panel_bg, padx=18, pady=18)
         self.panel.grid(row=0, column=1, sticky="ns", padx=(16, 0))
-        self.panel.configure(width=320)
+        self.panel.configure(width=300)
         self.panel.grid_propagate(False)
+
+        # Column 3: move history (tall)
+        self.history_panel = tk.Frame(
+            self.shell, bg=self.ui_theme.panel_bg, padx=16, pady=18
+        )
+        self.history_panel.grid(row=0, column=2, sticky="nsew", padx=(12, 0))
+        self.history_panel.configure(width=280)
+        self.history_panel.grid_propagate(False)
+        self.shell.grid_columnconfigure(2, weight=1)
+        self.shell.grid_rowconfigure(0, weight=1)
 
         self.title_label = tk.Label(
             self.panel,
@@ -164,11 +175,13 @@ class ChessGuiApp:
                 font=("Segoe UI", 10),
                 anchor="w",
                 justify="left",
+                wraplength=260,
             )
             label.pack(fill="x", pady=2)
             self._info_labels.append(label)
 
-        tk.Frame(self.panel, bg=self.ui_theme.muted, height=1).pack(fill="x", pady=12)
+        self._divider_info = tk.Frame(self.panel, bg=self.ui_theme.muted, height=1)
+        self._divider_info.pack(fill="x", pady=12)
 
         diff_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
         diff_row.pack(fill="x", pady=(0, 8))
@@ -185,7 +198,7 @@ class ChessGuiApp:
             diff_row,
             textvariable=self.difficulty_var,
             values=[d.label for d in DIFFICULTIES.values()],
-            width=22,
+            width=20,
             state="readonly",
         )
         self.difficulty_box.pack(side=tk.RIGHT)
@@ -199,7 +212,7 @@ class ChessGuiApp:
             font=("Segoe UI", 9),
             anchor="w",
             justify="left",
-            wraplength=280,
+            wraplength=260,
         )
         self.difficulty_desc.pack(fill="x", pady=(0, 10))
 
@@ -250,7 +263,7 @@ class ChessGuiApp:
         self.undo_btn.pack(side=tk.LEFT, expand=True, fill="x", padx=(4, 0))
 
         pgn_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        pgn_row.pack(fill="x", pady=(0, 10))
+        pgn_row.pack(fill="x", pady=(0, 4))
         ttk.Button(pgn_row, text="Copy PGN", command=self._on_copy_pgn).pack(
             side=tk.LEFT, expand=True, fill="x", padx=(0, 4)
         )
@@ -258,26 +271,29 @@ class ChessGuiApp:
             side=tk.LEFT, expand=True, fill="x", padx=(4, 0)
         )
 
-        tk.Label(
-            self.panel,
+        # History column
+        self.move_list_title = tk.Label(
+            self.history_panel,
             text="Move list (SAN)",
             bg=self.ui_theme.panel_bg,
             fg=self.ui_theme.text,
-            font=("Segoe UI Semibold", 10),
+            font=("Segoe UI Semibold", 11),
             anchor="w",
-        ).pack(fill="x", pady=(4, 2))
+        )
+        self.move_list_title.pack(fill="x", pady=(0, 8))
 
-        list_frame = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        list_frame = tk.Frame(self.history_panel, bg=self.ui_theme.panel_bg)
         list_frame.pack(fill="both", expand=True)
         self.move_list = tk.Listbox(
             list_frame,
-            height=11,
+            height=28,
             activestyle="dotbox",
-            font=("Consolas", 10),
+            font=("Consolas", 11),
             bg="#1f2330",
             fg=self.ui_theme.text,
             highlightthickness=0,
             borderwidth=0,
+            selectbackground=self.ui_theme.accent,
         )
         scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.move_list.yview)
         self.move_list.configure(yscrollcommand=scroll.set)
@@ -285,27 +301,33 @@ class ChessGuiApp:
         scroll.pack(side=tk.RIGHT, fill="y")
 
         self.hint_label = tk.Label(
-            self.panel,
+            self.history_panel,
             textvariable=self.hint_var,
             bg=self.ui_theme.panel_bg,
             fg=self.ui_theme.muted,
             font=("Segoe UI", 9),
             anchor="w",
             justify="left",
-            wraplength=280,
+            wraplength=240,
         )
-        self.hint_label.pack(fill="x", pady=(10, 0))
+        self.hint_label.pack(fill="x", pady=(12, 0))
+
+        # Match side-panel height to the board canvas.
+        self.panel.configure(height=size)
+        self.history_panel.configure(height=size)
 
     def _apply_theme_styles(self) -> None:
         self.root.configure(bg=self.ui_theme.app_bg)
         self.shell.configure(bg=self.ui_theme.app_bg)
         self.panel.configure(bg=self.ui_theme.panel_bg)
+        self.history_panel.configure(bg=self.ui_theme.panel_bg)
         self.canvas.configure(background=self.board_theme.canvas_bg)
         for widget in (
             self.title_label,
             self.subtitle_label,
             self.hint_label,
             self.difficulty_desc,
+            self.move_list_title,
             *self._info_labels,
         ):
             widget.configure(bg=self.ui_theme.panel_bg)
@@ -313,10 +335,16 @@ class ChessGuiApp:
         self.subtitle_label.configure(fg=self.ui_theme.muted)
         self.hint_label.configure(fg=self.ui_theme.muted)
         self.difficulty_desc.configure(fg=self.ui_theme.muted)
+        self.move_list_title.configure(fg=self.ui_theme.text)
+        self._divider_info.configure(bg=self.ui_theme.muted)
         for label in self._info_labels:
             label.configure(fg=self.ui_theme.text)
         list_bg = "#1f2330" if self.ui_theme.name == "dark" else "#f7f8fb"
-        self.move_list.configure(bg=list_bg, fg=self.ui_theme.text)
+        self.move_list.configure(
+            bg=list_bg,
+            fg=self.ui_theme.text,
+            selectbackground=self.ui_theme.accent,
+        )
 
     def _on_theme_changed(self) -> None:
         self.board_theme = BOARD_THEMES[self.board_theme_var.get()]
