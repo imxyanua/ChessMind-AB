@@ -1,4 +1,4 @@
-"""Unit tests for EvaluationFunction V1."""
+"""Unit tests for EvaluationFunction V2 (material + PST)."""
 
 from chessmind_ab.domain.board import Board
 from chessmind_ab.domain.color import Color
@@ -22,7 +22,7 @@ def _state(pieces: dict[str, Piece]) -> GameState:
     )
 
 
-def test_equal_material_is_zero() -> None:
+def test_mirrored_equal_material_is_zero() -> None:
     state = _state(
         {
             "e1": Piece(type=PieceType.KING, color=Color.WHITE),
@@ -34,7 +34,7 @@ def test_equal_material_is_zero() -> None:
     assert EvaluationFunction.evaluate(state) == 0
 
 
-def test_white_extra_queen_scores_plus_900() -> None:
+def test_white_extra_queen_is_strongly_positive() -> None:
     state = _state(
         {
             "e1": Piece(type=PieceType.KING, color=Color.WHITE),
@@ -42,10 +42,10 @@ def test_white_extra_queen_scores_plus_900() -> None:
             "d1": Piece(type=PieceType.QUEEN, color=Color.WHITE),
         }
     )
-    assert EvaluationFunction.evaluate(state) == 900
+    assert EvaluationFunction.evaluate(state) >= 850
 
 
-def test_black_extra_rook_scores_minus_500() -> None:
+def test_black_extra_rook_is_strongly_negative() -> None:
     state = _state(
         {
             "e1": Piece(type=PieceType.KING, color=Color.WHITE),
@@ -53,4 +53,22 @@ def test_black_extra_rook_scores_minus_500() -> None:
             "a8": Piece(type=PieceType.ROOK, color=Color.BLACK),
         }
     )
-    assert EvaluationFunction.evaluate(state) == -500
+    assert EvaluationFunction.evaluate(state) <= -450
+
+
+def test_central_knight_better_than_rim_knight() -> None:
+    rim = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "a1": Piece(type=PieceType.KNIGHT, color=Color.WHITE),
+        }
+    )
+    center = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "e4": Piece(type=PieceType.KNIGHT, color=Color.WHITE),
+        }
+    )
+    assert EvaluationFunction.evaluate(center) > EvaluationFunction.evaluate(rim)

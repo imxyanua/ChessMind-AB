@@ -29,7 +29,7 @@ python -m chessmind_ab
 Optional AI depth:
 
 ```bash
-python -m chessmind_ab gui --depth 2
+python -m chessmind_ab gui --depth 3
 ```
 
 How to play:

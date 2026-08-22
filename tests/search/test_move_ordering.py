@@ -1,4 +1,4 @@
-"""Unit tests for MoveOrdering."""
+"""Unit tests for strengthened MoveOrdering."""
 
 from chessmind_ab.domain.board import Board
 from chessmind_ab.domain.color import Color
@@ -14,13 +14,13 @@ from chessmind_ab.search.minimax import MinimaxSearch
 from chessmind_ab.search.move_ordering import MoveOrdering
 
 
-def _state(pieces: dict[str, Piece]) -> GameState:
+def _state(pieces: dict[str, Piece], side: Color = Color.WHITE) -> GameState:
     board = Board()
     for notation, piece in pieces.items():
         board.set_piece(Position.from_chess_notation(notation), piece)
     return GameState(
         board=board,
-        side_to_move=Color.WHITE,
+        side_to_move=side,
         status=GameStatus.ONGOING,
         ply_count=0,
     )
@@ -42,26 +42,49 @@ def test_ordering_preserves_move_set() -> None:
     assert set(ordered) == set(moves)
 
 
-def test_ordering_priority_promotion_then_capture_then_normal() -> None:
+def test_mvv_lva_prefers_capturing_queen_over_pawn() -> None:
     state = _state(
         {
             "e1": Piece(type=PieceType.KING, color=Color.WHITE),
             "a8": Piece(type=PieceType.KING, color=Color.BLACK),
-            "e7": Piece(type=PieceType.PAWN, color=Color.WHITE),
-            "d8": Piece(type=PieceType.ROOK, color=Color.BLACK),
-            "a2": Piece(type=PieceType.ROOK, color=Color.WHITE),
+            "d4": Piece(type=PieceType.KNIGHT, color=Color.WHITE),
+            "e6": Piece(type=PieceType.QUEEN, color=Color.BLACK),
+            "c6": Piece(type=PieceType.PAWN, color=Color.BLACK),
         }
     )
     ordered = MoveOrdering.order(state, LegalMoveGenerator.generate(state))
-    priorities = []
-    for move in ordered:
-        if move.move_type in {MoveType.PROMOTION, MoveType.PROMOTION_CAPTURE}:
-            priorities.append(0)
-        elif move.move_type is MoveType.CAPTURE:
-            priorities.append(1)
-        else:
-            priorities.append(2)
-    assert priorities == sorted(priorities)
+    captures = [m for m in ordered if m.move_type is MoveType.CAPTURE]
+    assert captures
+    assert captures[0].to_position.to_chess_notation() == "e6"
+    assert captures[0].captured_piece is not None
+    assert captures[0].captured_piece.type is PieceType.QUEEN
+
+
+def test_checking_move_outranks_quiet_non_capture() -> None:
+    # White rook can check on open file or move sideways quietly.
+    state = _state(
+        {
+            "a1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "h1": Piece(type=PieceType.ROOK, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "a7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+            "b7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+            "c7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+            "d7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+            "e7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+            "f7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+            "g7": Piece(type=PieceType.PAWN, color=Color.BLACK),
+        }
+    )
+    ordered = MoveOrdering.order(state, LegalMoveGenerator.generate(state))
+    # First non-capture should include the checking rook lift/file if present.
+    non_captures = [
+        m
+        for m in ordered
+        if m.move_type not in {MoveType.CAPTURE, MoveType.PROMOTION, MoveType.PROMOTION_CAPTURE}
+    ]
+    assert non_captures
+    assert non_captures[0].to_position.to_chess_notation() == "h8"
 
 
 def test_ordered_alpha_beta_matches_minimax_score() -> None:
