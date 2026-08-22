@@ -113,13 +113,13 @@ class EvaluationFunction:
                 piece = state.board.get_piece(Position(row=row, column=column))
                 if piece is None:
                     continue
+                # King has no material value; use == (not `is`) for enum safety.
+                material = 0 if piece.type == PieceType.KING else MATERIAL_VALUES.get(
+                    piece.type, 0
+                )
                 pst = _pst_value(piece.type, piece.color, row, column)
-                if piece.type is PieceType.KING:
-                    material = 0
-                else:
-                    material = MATERIAL_VALUES[piece.type]
                 term = material + pst
-                score += term if piece.color is Color.WHITE else -term
+                score += term if piece.color == Color.WHITE else -term
 
         white_mobility = len(PseudoMoveGenerator.generate(state, Color.WHITE))
         black_mobility = len(PseudoMoveGenerator.generate(state, Color.BLACK))

@@ -74,6 +74,21 @@ def test_central_knight_better_than_rim_knight() -> None:
     assert EvaluationFunction.evaluate(center) > EvaluationFunction.evaluate(rim)
 
 
+def test_evaluate_initial_position_and_kings_only_does_not_crash() -> None:
+    from chessmind_ab.domain.initial_position import create_initial_game_state
+
+    initial = create_initial_game_state()
+    assert isinstance(EvaluationFunction.evaluate(initial), int)
+
+    kings_only = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+        }
+    )
+    assert isinstance(EvaluationFunction.evaluate(kings_only), int)
+
+
 def test_higher_mobility_side_scores_better_with_equal_material() -> None:
     cramped = _state(
         {
