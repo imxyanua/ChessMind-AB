@@ -19,11 +19,20 @@ python -m pip install -e ".[dev]"
 pytest
 ```
 
+## Play / demo
+
+```bash
+python -m chessmind_ab demo
+python -m chessmind_ab play --depth 2
+```
+
 ## Layout
 
 ```text
 src/chessmind_ab/
   domain/
+  search/
+  application/
+  presentation/
 tests/
-  domain/
 ```

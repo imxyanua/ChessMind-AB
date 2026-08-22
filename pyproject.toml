@@ -15,6 +15,9 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
+[project.scripts]
+chessmind-ab = "chessmind_ab.presentation.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

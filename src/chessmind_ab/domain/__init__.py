@@ -6,6 +6,7 @@ from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState, InvalidGameStateError
 from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.game_status_evaluator import GameStatusEvaluator
+from chessmind_ab.domain.initial_position import create_initial_game_state
 from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
 from chessmind_ab.domain.move import InvalidMoveError, Move
 from chessmind_ab.domain.move_type import MoveType
@@ -26,6 +27,7 @@ __all__ = [
     "GameStatus",
     "GameStatusEvaluator",
     "IllegalStateTransitionError",
+    "create_initial_game_state",
     "InvalidGameStateError",
     "InvalidMoveError",
     "InvalidPositionError",
