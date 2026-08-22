@@ -66,11 +66,11 @@ DIFFICULTIES: dict[str, Difficulty] = {
         key="expert",
         name="Expert",
         elo=1400,
-        depth=4,
+        depth=3,
         diversity_window=15,
         early_diversity_window=25,
         use_opening_book=False,
-        description="Strongest preset; may think longer.",
+        description="Strongest preset (deep search, less random). Thinks in background.",
     ),
 }
 

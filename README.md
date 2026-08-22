@@ -35,6 +35,8 @@ python -m chessmind_ab gui --difficulty medium
 
 Modes: `beginner` (~600), `easy` (~800), `medium` (~1000), `hard` (~1200), `expert` (~1400).
 
+AI search runs in a **background thread** so the window should stay responsive while thinking.
+
 How to play:
 
 1. A window opens with the chess board and an info panel.

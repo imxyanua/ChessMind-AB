@@ -30,3 +30,13 @@ def test_chess_gui_app_builds(tk_root) -> None:
     assert app.board_theme_var.get() in {"green", "wood"}
     assert app.ui_theme_var.get() in {"dark", "light"}
     assert "Beginner" in app.difficulty_var.get()
+
+
+def test_ai_async_helpers_exist(tk_root) -> None:
+    app = ChessGuiApp(tk_root, difficulty_key="beginner")
+    assert hasattr(app, "_run_ai_move_async")
+    assert hasattr(app, "_on_ai_search_finished")
+    app._ai_busy = True
+    app._start_thinking_pulse()
+    app._stop_thinking_pulse()
+    app._ai_busy = False
