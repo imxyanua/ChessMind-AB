@@ -16,6 +16,11 @@ from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
 from chessmind_ab.domain.state_transition import StateTransition
+from chessmind_ab.application.difficulty import (
+    DEFAULT_DIFFICULTY_KEY,
+    Difficulty,
+    get_difficulty,
+)
 from chessmind_ab.search.alpha_beta import AlphaBetaSearch
 from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.opening_book import OpeningBook
@@ -23,8 +28,6 @@ from chessmind_ab.search.protocol import SearchAlgorithm
 from chessmind_ab.search.search_result import SearchResult
 from chessmind_ab.search.search_statistics import SearchStatistics
 
-_PLAY_DIVERSITY_WINDOW = 35
-_EARLY_DIVERSITY_WINDOW = 80
 _EARLY_PLY_LIMIT = 10
 
 
@@ -55,17 +58,20 @@ class GameController:
     def __init__(
         self,
         search: SearchAlgorithm | None = None,
-        ai_depth: int = 3,
+        ai_depth: int | None = None,
         player_color: Color = Color.WHITE,
+        difficulty_key: str = DEFAULT_DIFFICULTY_KEY,
     ) -> None:
         self._rng = random.Random()
+        self._difficulty = get_difficulty(difficulty_key)
+        depth = ai_depth if ai_depth is not None else self._difficulty.depth
         self._search = search or AlphaBetaSearch(
             move_ordering=MoveOrdering(),
-            diversity_window=_PLAY_DIVERSITY_WINDOW,
+            diversity_window=self._difficulty.diversity_window,
             rng=self._rng,
         )
         self._opening_book = OpeningBook(max_ply=8)
-        self._ai_depth = ai_depth
+        self._ai_depth = depth
         self._player_color = player_color
         self._state = create_initial_game_state()
         self._last_search_result: SearchResult | None = None
@@ -109,6 +115,15 @@ class GameController:
         if depth < 1:
             raise ValueError("depth must be >= 1")
         self._ai_depth = depth
+
+    def get_difficulty(self) -> Difficulty:
+        return self._difficulty
+
+    def set_difficulty(self, difficulty_key: str) -> None:
+        self._difficulty = get_difficulty(difficulty_key)
+        self._ai_depth = self._difficulty.depth
+        if isinstance(self._search, AlphaBetaSearch):
+            self._search._diversity_window = self._difficulty.diversity_window
 
     def _push_undo_snapshot(self) -> None:
         self._undo_stack.append(
@@ -201,22 +216,23 @@ class GameController:
         if self._state.side_to_move is self._player_color:
             return MoveResult(False, "Not AI turn", self._state)
 
-        book_move = self._opening_book.suggest(self._state, self._rng)
-        if book_move is not None:
-            self._last_search_result = SearchResult(
-                best_move=book_move,
-                best_score=0,
-                statistics=SearchStatistics(),
-            )
-            self._state = StateTransition.apply(self._state, book_move)
-            self._state.status = GameStatusEvaluator.evaluate(self._state)
-            self._record_move(book_move, by_player=False)
-            return MoveResult(True, "AI book move", self._state)
+        if self._difficulty.use_opening_book:
+            book_move = self._opening_book.suggest(self._state, self._rng)
+            if book_move is not None:
+                self._last_search_result = SearchResult(
+                    best_move=book_move,
+                    best_score=0,
+                    statistics=SearchStatistics(),
+                )
+                self._state = StateTransition.apply(self._state, book_move)
+                self._state.status = GameStatusEvaluator.evaluate(self._state)
+                self._record_move(book_move, by_player=False)
+                return MoveResult(True, "AI book move", self._state)
 
         diversity = (
-            _EARLY_DIVERSITY_WINDOW
+            self._difficulty.early_diversity_window
             if self._state.ply_count < _EARLY_PLY_LIMIT
-            else _PLAY_DIVERSITY_WINDOW
+            else self._difficulty.diversity_window
         )
         if isinstance(self._search, AlphaBetaSearch):
             result = self._search.find_best_move(

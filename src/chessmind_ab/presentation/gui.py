@@ -1,10 +1,16 @@
-"""Tkinter GUI with PNG pieces, themes, captured list, moves, and undo."""
+"""Tkinter GUI: Elo difficulty modes, move animation, polished panel."""
 
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from chessmind_ab.application.difficulty import (
+    DEFAULT_DIFFICULTY_KEY,
+    DIFFICULTIES,
+    difficulty_from_label,
+    get_difficulty,
+)
 from chessmind_ab.application.game_controller import GameController, material_sort_key
 from chessmind_ab.domain.attack_detector import AttackDetector
 from chessmind_ab.domain.color import Color
@@ -17,7 +23,6 @@ from chessmind_ab.presentation.board_geometry import BoardGeometry
 from chessmind_ab.presentation.piece_images import PieceImageCache
 from chessmind_ab.presentation.themes import BOARD_THEMES, UI_THEMES, BoardTheme, UiTheme
 
-# Fallback glyphs if a sprite fails to load.
 _PIECE_GLYPHS = {
     (PieceType.KING, Color.WHITE): "♔",
     (PieceType.QUEEN, Color.WHITE): "♕",
@@ -33,6 +38,9 @@ _PIECE_GLYPHS = {
     (PieceType.PAWN, Color.BLACK): "♟",
 }
 
+_ANIM_STEPS = 12
+_ANIM_INTERVAL_MS = 16
+
 
 def piece_glyph(piece: Piece) -> str:
     return _PIECE_GLYPHS[(piece.type, piece.color)]
@@ -43,7 +51,11 @@ def format_status(status: GameStatus) -> str:
 
 
 class ChessGuiApp:
-    def __init__(self, root: tk.Tk, depth: int = 3) -> None:
+    def __init__(
+        self,
+        root: tk.Tk,
+        difficulty_key: str = DEFAULT_DIFFICULTY_KEY,
+    ) -> None:
         self.root = root
         self.root.title("ChessMind-AB")
         self.root.resizable(False, False)
@@ -51,9 +63,11 @@ class ChessGuiApp:
         self.board_theme: BoardTheme = BOARD_THEMES["green"]
         self.ui_theme: UiTheme = UI_THEMES["dark"]
 
-        self.geometry = BoardGeometry(square_size=80, margin=32)
+        self.geometry = BoardGeometry(square_size=84, margin=34)
         self.piece_images = PieceImageCache(self.geometry.square_size)
-        self.controller = GameController(ai_depth=depth, player_color=Color.WHITE)
+        self.controller = GameController(
+            difficulty_key=difficulty_key, player_color=Color.WHITE
+        )
         self.controller.start_new_game()
 
         self.selected: Position | None = None
@@ -61,16 +75,20 @@ class ChessGuiApp:
         self.capture_targets: set[Position] = set()
         self.last_from: Position | None = None
         self.last_to: Position | None = None
+        self._flash_to: Position | None = None
         self._ai_busy = False
+        self._animating = False
         self._hover: Position | None = None
+        self._hidden_positions: set[Position] = set()
+        self._floating: dict[str, object] = {}
 
-        self._build_layout(depth)
+        self._build_layout()
         self._apply_theme_styles()
         self._redraw()
         self._refresh_panel()
 
-    def _build_layout(self, depth: int) -> None:
-        self.shell = tk.Frame(self.root, bg=self.ui_theme.app_bg, padx=12, pady=12)
+    def _build_layout(self) -> None:
+        self.shell = tk.Frame(self.root, bg=self.ui_theme.app_bg, padx=14, pady=14)
         self.shell.grid(row=0, column=0, sticky="nsew")
 
         board_wrap = tk.Frame(self.shell, bg=self.ui_theme.app_bg)
@@ -90,9 +108,9 @@ class ChessGuiApp:
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Leave>", self._on_leave)
 
-        self.panel = tk.Frame(self.shell, bg=self.ui_theme.panel_bg, padx=16, pady=16)
-        self.panel.grid(row=0, column=1, sticky="ns", padx=(14, 0))
-        self.panel.configure(width=300)
+        self.panel = tk.Frame(self.shell, bg=self.ui_theme.panel_bg, padx=18, pady=18)
+        self.panel.grid(row=0, column=1, sticky="ns", padx=(16, 0))
+        self.panel.configure(width=320)
         self.panel.grid_propagate(False)
 
         self.title_label = tk.Label(
@@ -100,22 +118,23 @@ class ChessGuiApp:
             text="ChessMind-AB",
             bg=self.ui_theme.panel_bg,
             fg=self.ui_theme.text,
-            font=("Segoe UI Semibold", 14),
+            font=("Segoe UI Semibold", 16),
             anchor="w",
         )
         self.title_label.pack(fill="x")
         self.subtitle_label = tk.Label(
             self.panel,
-            text="Player (White) vs AI (Black)",
+            text="White vs AI  ·  choose an Elo mode",
             bg=self.ui_theme.panel_bg,
             fg=self.ui_theme.muted,
             font=("Segoe UI", 9),
             anchor="w",
         )
-        self.subtitle_label.pack(fill="x", pady=(0, 10))
+        self.subtitle_label.pack(fill="x", pady=(0, 12))
 
         self.turn_var = tk.StringVar(value="Turn: White")
         self.status_var = tk.StringVar(value="Status: Ongoing")
+        self.mode_var = tk.StringVar(value="")
         self.last_move_var = tk.StringVar(value="Last move: —")
         self.ai_info_var = tk.StringVar(value="AI: waiting")
         self.stats_var = tk.StringVar(value="Nodes: — | Time: —")
@@ -125,6 +144,7 @@ class ChessGuiApp:
 
         self._info_labels: list[tk.Label] = []
         for var in (
+            self.mode_var,
             self.turn_var,
             self.status_var,
             self.last_move_var,
@@ -145,7 +165,40 @@ class ChessGuiApp:
             label.pack(fill="x", pady=2)
             self._info_labels.append(label)
 
-        tk.Frame(self.panel, bg=self.ui_theme.muted, height=1).pack(fill="x", pady=10)
+        tk.Frame(self.panel, bg=self.ui_theme.muted, height=1).pack(fill="x", pady=12)
+
+        diff_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        diff_row.pack(fill="x", pady=(0, 8))
+        tk.Label(
+            diff_row,
+            text="Difficulty",
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI Semibold", 10),
+        ).pack(side=tk.LEFT)
+        current = self.controller.get_difficulty()
+        self.difficulty_var = tk.StringVar(value=current.label)
+        self.difficulty_box = ttk.Combobox(
+            diff_row,
+            textvariable=self.difficulty_var,
+            values=[d.label for d in DIFFICULTIES.values()],
+            width=22,
+            state="readonly",
+        )
+        self.difficulty_box.pack(side=tk.RIGHT)
+        self.difficulty_var.trace_add("write", lambda *_: self._on_difficulty_changed())
+
+        self.difficulty_desc = tk.Label(
+            self.panel,
+            text=current.description,
+            bg=self.ui_theme.panel_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+            anchor="w",
+            justify="left",
+            wraplength=280,
+        )
+        self.difficulty_desc.pack(fill="x", pady=(0, 10))
 
         theme_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
         theme_row.pack(fill="x", pady=(0, 6))
@@ -161,13 +214,13 @@ class ChessGuiApp:
             theme_row,
             textvariable=self.board_theme_var,
             values=list(BOARD_THEMES.keys()),
-            width=8,
+            width=10,
             state="readonly",
         ).pack(side=tk.RIGHT)
         self.board_theme_var.trace_add("write", lambda *_: self._on_theme_changed())
 
         ui_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        ui_row.pack(fill="x", pady=(0, 6))
+        ui_row.pack(fill="x", pady=(0, 10))
         tk.Label(
             ui_row,
             text="UI",
@@ -180,32 +233,13 @@ class ChessGuiApp:
             ui_row,
             textvariable=self.ui_theme_var,
             values=list(UI_THEMES.keys()),
-            width=8,
+            width=10,
             state="readonly",
         ).pack(side=tk.RIGHT)
         self.ui_theme_var.trace_add("write", lambda *_: self._on_theme_changed())
 
-        depth_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        depth_row.pack(fill="x", pady=(0, 8))
-        tk.Label(
-            depth_row,
-            text="AI depth",
-            bg=self.ui_theme.panel_bg,
-            fg=self.ui_theme.text,
-            font=("Segoe UI", 10),
-        ).pack(side=tk.LEFT)
-        self.depth_var = tk.IntVar(value=depth)
-        ttk.Spinbox(
-            depth_row,
-            from_=1,
-            to=5,
-            width=4,
-            textvariable=self.depth_var,
-            command=self._on_depth_changed,
-        ).pack(side=tk.RIGHT)
-
         btn_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        btn_row.pack(fill="x", pady=(4, 8))
+        btn_row.pack(fill="x", pady=(4, 10))
         ttk.Button(btn_row, text="New Game", command=self._on_new_game).pack(
             side=tk.LEFT, expand=True, fill="x", padx=(0, 4)
         )
@@ -220,16 +254,16 @@ class ChessGuiApp:
             fg=self.ui_theme.text,
             font=("Segoe UI Semibold", 10),
             anchor="w",
-        ).pack(fill="x", pady=(6, 2))
+        ).pack(fill="x", pady=(4, 2))
 
         list_frame = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
         list_frame.pack(fill="both", expand=True)
         self.move_list = tk.Listbox(
             list_frame,
-            height=12,
+            height=11,
             activestyle="dotbox",
             font=("Consolas", 10),
-            bg="#1f2330" if self.ui_theme.name == "dark" else "#f7f8fb",
+            bg="#1f2330",
             fg=self.ui_theme.text,
             highlightthickness=0,
             borderwidth=0,
@@ -247,7 +281,7 @@ class ChessGuiApp:
             font=("Segoe UI", 9),
             anchor="w",
             justify="left",
-            wraplength=260,
+            wraplength=280,
         )
         self.hint_label.pack(fill="x", pady=(10, 0))
 
@@ -256,11 +290,18 @@ class ChessGuiApp:
         self.shell.configure(bg=self.ui_theme.app_bg)
         self.panel.configure(bg=self.ui_theme.panel_bg)
         self.canvas.configure(background=self.board_theme.canvas_bg)
-        for widget in (self.title_label, self.subtitle_label, self.hint_label, *self._info_labels):
+        for widget in (
+            self.title_label,
+            self.subtitle_label,
+            self.hint_label,
+            self.difficulty_desc,
+            *self._info_labels,
+        ):
             widget.configure(bg=self.ui_theme.panel_bg)
         self.title_label.configure(fg=self.ui_theme.text)
         self.subtitle_label.configure(fg=self.ui_theme.muted)
         self.hint_label.configure(fg=self.ui_theme.muted)
+        self.difficulty_desc.configure(fg=self.ui_theme.muted)
         for label in self._info_labels:
             label.configure(fg=self.ui_theme.text)
         list_bg = "#1f2330" if self.ui_theme.name == "dark" else "#f7f8fb"
@@ -272,24 +313,30 @@ class ChessGuiApp:
         self._apply_theme_styles()
         self._redraw()
 
-    def _on_depth_changed(self) -> None:
-        self.controller.set_ai_depth(int(self.depth_var.get()))
+    def _on_difficulty_changed(self) -> None:
+        diff = difficulty_from_label(self.difficulty_var.get())
+        self.controller.set_difficulty(diff.key)
+        self.difficulty_desc.configure(text=diff.description)
+        self._refresh_panel(message=f"Difficulty set to {diff.label}.")
 
     def _on_new_game(self) -> None:
+        if self._animating:
+            return
         self.controller.start_new_game()
-        self.controller.set_ai_depth(int(self.depth_var.get()))
         self.selected = None
         self.target_squares.clear()
         self.capture_targets.clear()
         self.last_from = None
         self.last_to = None
+        self._flash_to = None
         self._ai_busy = False
         self._hover = None
+        self._hidden_positions.clear()
         self._redraw()
         self._refresh_panel(message="New game started. White to move.")
 
     def _on_undo(self) -> None:
-        if self._ai_busy:
+        if self._ai_busy or self._animating:
             return
         result = self.controller.undo()
         self.selected = None
@@ -303,11 +350,15 @@ class ChessGuiApp:
         else:
             self.last_from = None
             self.last_to = None
+        self._flash_to = None
         self._redraw()
         self._refresh_panel(message=result.message)
 
+    def _busy(self) -> bool:
+        return self._ai_busy or self._animating
+
     def _on_motion(self, event: tk.Event) -> None:
-        if self._ai_busy:
+        if self._busy():
             return
         try:
             hover = self.geometry.pixels_to_position(event.x, event.y)
@@ -326,7 +377,7 @@ class ChessGuiApp:
             self._redraw()
 
     def _on_click(self, event: tk.Event) -> None:
-        if self._ai_busy:
+        if self._busy():
             return
         state = self.controller.get_state()
         if state.status is not GameStatus.ONGOING:
@@ -360,6 +411,7 @@ class ChessGuiApp:
             return
 
         source = self.selected
+        moving = state.board.get_piece(source)
         result = self.controller.make_player_move_from_notation(
             source.to_chess_notation(),
             clicked.to_chess_notation(),
@@ -367,14 +419,21 @@ class ChessGuiApp:
         self.selected = None
         self.target_squares.clear()
         self.capture_targets.clear()
-        if not result.success:
+        if not result.success or moving is None:
             self._redraw()
             self._refresh_panel(message=result.message)
             return
 
         self.last_from = source
         self.last_to = clicked
-        self._redraw()
+        self._animate_move(
+            moving,
+            source,
+            clicked,
+            on_done=lambda: self._after_player_move(source, clicked),
+        )
+
+    def _after_player_move(self, source: Position, clicked: Position) -> None:
         self._refresh_panel(
             message=f"You played {source.to_chess_notation()}{clicked.to_chess_notation()}."
         )
@@ -404,37 +463,115 @@ class ChessGuiApp:
         if state.side_to_move is Color.BLACK:
             self._ai_busy = True
             self._refresh_panel(message="AI thinking...")
-            self.root.after(40, self._run_ai_move)
+            self.root.after(30, self._run_ai_move)
 
     def _run_ai_move(self) -> None:
         try:
             result = self.controller.make_ai_move()
-        except Exception as exc:  # noqa: BLE001 - keep UI responsive on search bugs
+        except Exception as exc:  # noqa: BLE001
             self._ai_busy = False
             self._redraw()
             self._refresh_panel(message=f"AI error: {exc}")
             messagebox.showerror("AI error", str(exc))
             return
 
-        self._ai_busy = False
         search = self.controller.get_last_search_result()
         if result.success and search and search.best_move is not None:
-            self.last_from = search.best_move.from_position
-            self.last_to = search.best_move.to_position
+            move = search.best_move
+            self.last_from = move.from_position
+            self.last_to = move.to_position
             notation = (
-                f"{search.best_move.from_position.to_chess_notation()}"
-                f"{search.best_move.to_position.to_chess_notation()}"
+                f"{move.from_position.to_chess_notation()}"
+                f"{move.to_position.to_chess_notation()}"
             )
-            self._redraw()
-            self._refresh_panel(
-                message=f"AI played {notation}.",
-                ai_line=f"AI: {notation} (score {search.best_score})",
+            self._animate_move(
+                move.moving_piece,
+                move.from_position,
+                move.to_position,
+                on_done=lambda: self._after_ai_move(result.message, notation, search),
             )
-        else:
-            self._redraw()
-            self._refresh_panel(message=result.message)
+            return
+
+        self._ai_busy = False
+        self._redraw()
+        self._refresh_panel(message=result.message)
         if self.controller.get_state().status is not GameStatus.ONGOING:
             self._show_game_over()
+
+    def _after_ai_move(self, message: str, notation: str, search) -> None:
+        self._ai_busy = False
+        self._refresh_panel(
+            message=f"AI played {notation}.",
+            ai_line=f"AI: {notation} (score {search.best_score})",
+        )
+        if self.controller.get_state().status is not GameStatus.ONGOING:
+            self._show_game_over()
+
+    def _animate_move(
+        self,
+        piece: Piece,
+        source: Position,
+        target: Position,
+        on_done,
+    ) -> None:
+        self._animating = True
+        self._hidden_positions = {source, target}
+        self._flash_to = target
+        self._redraw()
+
+        x0, y0, x1, y1 = self.geometry.position_to_pixels(source)
+        tx0, ty0, tx1, ty1 = self.geometry.position_to_pixels(target)
+        start = ((x0 + x1) / 2, (y0 + y1) / 2)
+        end = ((tx0 + tx1) / 2, (ty0 + ty1) / 2)
+
+        try:
+            image = self.piece_images.get(piece)
+            floating = self.canvas.create_image(start[0], start[1], image=image)
+            self._floating["image_ref"] = image
+        except Exception:
+            floating = self.canvas.create_text(
+                start[0],
+                start[1],
+                text=piece_glyph(piece),
+                font=("Segoe UI Symbol", 40),
+            )
+
+        # Destination pulse ring
+        pulse = self.canvas.create_oval(
+            tx0 + 6,
+            ty0 + 6,
+            tx1 - 6,
+            ty1 - 6,
+            outline="#ffffff",
+            width=3,
+        )
+
+        step = {"i": 0}
+
+        def tick() -> None:
+            i = step["i"]
+            if i >= _ANIM_STEPS:
+                self.canvas.delete(floating)
+                self.canvas.delete(pulse)
+                self._floating.clear()
+                self._hidden_positions.clear()
+                self._animating = False
+                self._redraw()
+                on_done()
+                return
+            t = (i + 1) / _ANIM_STEPS
+            # Ease out cubic
+            te = 1 - (1 - t) ** 3
+            x = start[0] + (end[0] - start[0]) * te
+            y = start[1] + (end[1] - start[1]) * te
+            self.canvas.coords(floating, x, y)
+            # Shrink pulse slightly
+            pad = 6 + int(4 * t)
+            self.canvas.coords(pulse, tx0 + pad, ty0 + pad, tx1 - pad, ty1 - pad)
+            step["i"] = i + 1
+            self.root.after(_ANIM_INTERVAL_MS, tick)
+
+        tick()
 
     def _show_game_over(self) -> None:
         pretty = format_status(self.controller.get_state().status)
@@ -457,6 +594,8 @@ class ChessGuiApp:
 
     def _refresh_panel(self, message: str | None = None, ai_line: str | None = None) -> None:
         state = self.controller.get_state()
+        diff = self.controller.get_difficulty()
+        self.mode_var.set(f"Mode: {diff.label}")
         turn = "White" if state.side_to_move is Color.WHITE else "Black"
         if self._ai_busy:
             turn = "Black (AI thinking)"
@@ -518,14 +657,14 @@ class ChessGuiApp:
         checked = self._checked_king_square()
         theme = self.board_theme
 
-        pad = 6
+        pad = 8
         self.canvas.create_rectangle(
             self.geometry.margin - pad,
             self.geometry.margin - pad,
             self.geometry.margin + self.geometry.board_pixels + pad,
             self.geometry.margin + self.geometry.board_pixels + pad,
-            fill="#0f1116",
-            outline="#3a4050",
+            fill="#0c0e14",
+            outline="#4a5163",
             width=2,
         )
 
@@ -538,6 +677,8 @@ class ChessGuiApp:
                     color = theme.select
                 elif position in {self.last_from, self.last_to}:
                     color = theme.last
+                if self._flash_to is not None and position == self._flash_to:
+                    color = theme.select
                 if checked is not None and position == checked:
                     color = theme.check
                 self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="")
@@ -578,6 +719,9 @@ class ChessGuiApp:
                             cx - r, cy - r, cx + r, cy + r, fill="#1f2421", outline=""
                         )
 
+                if position in self._hidden_positions:
+                    continue
+
                 piece = state.board.get_piece(position)
                 if piece is not None:
                     try:
@@ -594,7 +738,12 @@ class ChessGuiApp:
                         )
 
 
-def run_gui(depth: int = 3) -> None:
+def run_gui(depth: int | None = None, difficulty: str = DEFAULT_DIFFICULTY_KEY) -> None:
     root = tk.Tk()
-    ChessGuiApp(root, depth=depth)
+    key = difficulty
+    if depth is not None:
+        # Backward-compatible CLI --depth maps roughly onto presets.
+        mapping = {1: "beginner", 2: "medium", 3: "hard", 4: "expert", 5: "expert"}
+        key = mapping.get(depth, DEFAULT_DIFFICULTY_KEY)
+    ChessGuiApp(root, difficulty_key=key)
     root.mainloop()

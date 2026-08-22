@@ -86,7 +86,19 @@ def main(argv: list[str] | None = None) -> int:
         choices=["gui", "demo", "play", "benchmark"],
         help="gui/demo/play/benchmark",
     )
-    parser.add_argument("--depth", type=int, default=3)
+    parser.add_argument(
+        "--difficulty",
+        type=str,
+        default="medium",
+        choices=["beginner", "easy", "medium", "hard", "expert"],
+        help="GUI/play difficulty preset (Elo mode)",
+    )
+    parser.add_argument(
+        "--depth",
+        type=int,
+        default=None,
+        help="Optional search depth override (benchmark/demo/play)",
+    )
     parser.add_argument(
         "--out",
         type=str,
@@ -98,11 +110,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "gui":
         from chessmind_ab.presentation.gui import run_gui
 
-        run_gui(depth=args.depth)
+        run_gui(depth=args.depth, difficulty=args.difficulty)
         return 0
 
     if args.command == "demo":
-        print(run_demo(depth=args.depth))
+        print(run_demo(depth=args.depth or 1))
         return 0
 
     if args.command == "benchmark":
@@ -115,14 +127,17 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         # Keep experimental runs practical; depth 1-2 recommended.
-        depth = args.depth if args.depth >= 1 else 1
+        depth = args.depth if args.depth is not None and args.depth >= 1 else 1
         rows = run_benchmark(depth=depth)
         print(format_benchmark_table(rows))
         out = write_benchmark_csv(rows, Path(args.out))
         print(f"\nWrote CSV: {out.resolve()}")
         return 0
 
-    controller = GameController(ai_depth=args.depth)
+    controller = GameController(
+        difficulty_key=args.difficulty,
+        ai_depth=args.depth,
+    )
     controller.start_new_game()
     print(render_board(controller))
     print("Enter moves like e2e4, or 'quit'.")
