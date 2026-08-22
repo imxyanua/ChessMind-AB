@@ -55,6 +55,11 @@ class GameController:
     def get_last_search_result(self) -> SearchResult | None:
         return self._last_search_result
 
+    def set_ai_depth(self, depth: int) -> None:
+        if depth < 1:
+            raise ValueError("depth must be >= 1")
+        self._ai_depth = depth
+
     def make_player_move(self, move: Move) -> MoveResult:
         if self._state.status is not GameStatus.ONGOING:
             return MoveResult(False, "Game already over", self._state)

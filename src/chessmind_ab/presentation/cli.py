@@ -81,11 +81,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="chessmind-ab")
     parser.add_argument(
         "command",
-        choices=["demo", "play"],
-        help="demo = non-interactive smoke; play = interactive loop",
+        nargs="?",
+        default="gui",
+        choices=["gui", "demo", "play"],
+        help="gui = graphical window (default); demo/play = terminal helpers",
     )
-    parser.add_argument("--depth", type=int, default=1)
+    parser.add_argument("--depth", type=int, default=2)
     args = parser.parse_args(argv)
+
+    if args.command == "gui":
+        from chessmind_ab.presentation.gui import run_gui
+
+        run_gui(depth=args.depth)
+        return 0
 
     if args.command == "demo":
         print(run_demo(depth=args.depth))
