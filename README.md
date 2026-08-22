@@ -34,10 +34,10 @@ python -m chessmind_ab gui --depth 3
 
 How to play:
 
-1. A window opens with the chess board.
-2. Click a white piece, then click a highlighted destination square.
-3. The AI (Black) replies automatically.
-4. Use **New Game** to restart; change **AI depth** (1-4) as needed.
+1. A window opens with the chess board and an info panel.
+2. Click a white piece, then click a marked destination (dot/ring).
+3. The AI (Black) replies automatically; panel shows last move, score, nodes, time.
+4. Use **New Game** to restart; change **AI depth** (1-5) as needed.
 
 ## Run tests
 
