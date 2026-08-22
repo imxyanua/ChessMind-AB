@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from chessmind_ab.application.difficulty import (
     DEFAULT_DIFFICULTY_KEY,
@@ -242,17 +242,25 @@ class ChessGuiApp:
         self.ui_theme_var.trace_add("write", lambda *_: self._on_theme_changed())
 
         btn_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        btn_row.pack(fill="x", pady=(4, 10))
+        btn_row.pack(fill="x", pady=(4, 6))
         ttk.Button(btn_row, text="New Game", command=self._on_new_game).pack(
             side=tk.LEFT, expand=True, fill="x", padx=(0, 4)
         )
-        ttk.Button(btn_row, text="Undo", command=self._on_undo).pack(
+        self.undo_btn = ttk.Button(btn_row, text="Undo", command=self._on_undo)
+        self.undo_btn.pack(side=tk.LEFT, expand=True, fill="x", padx=(4, 0))
+
+        pgn_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        pgn_row.pack(fill="x", pady=(0, 10))
+        ttk.Button(pgn_row, text="Copy PGN", command=self._on_copy_pgn).pack(
+            side=tk.LEFT, expand=True, fill="x", padx=(0, 4)
+        )
+        ttk.Button(pgn_row, text="Save PGN", command=self._on_save_pgn).pack(
             side=tk.LEFT, expand=True, fill="x", padx=(4, 0)
         )
 
         tk.Label(
             self.panel,
-            text="Move list",
+            text="Move list (SAN)",
             bg=self.ui_theme.panel_bg,
             fg=self.ui_theme.text,
             font=("Segoe UI Semibold", 10),
@@ -341,6 +349,9 @@ class ChessGuiApp:
     def _on_undo(self) -> None:
         if self._ai_busy or self._animating:
             return
+        if not self.controller.can_undo():
+            self._refresh_panel(message="Nothing to undo")
+            return
         result = self.controller.undo()
         self.selected = None
         self.target_squares.clear()
@@ -356,6 +367,31 @@ class ChessGuiApp:
         self._flash_to = None
         self._redraw()
         self._refresh_panel(message=result.message)
+
+    def _on_copy_pgn(self) -> None:
+        pgn = self.controller.to_pgn()
+        self.root.clipboard_clear()
+        self.root.clipboard_append(pgn)
+        self.root.update_idletasks()
+        self._refresh_panel(message="PGN copied to clipboard.")
+
+    def _on_save_pgn(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Save PGN",
+            defaultextension=".pgn",
+            filetypes=[("PGN files", "*.pgn"), ("All files", "*.*")],
+            initialfile="chessmind.pgn",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(self.controller.to_pgn())
+        except OSError as exc:
+            messagebox.showerror("Save PGN failed", str(exc), parent=self.root)
+            return
+        self._refresh_panel(message=f"PGN saved: {path}")
 
     def _busy(self) -> bool:
         return self._ai_busy or self._animating
@@ -656,25 +692,23 @@ class ChessGuiApp:
         self.turn_var.set(f"Turn: {turn}")
         self.status_var.set(f"Status: {format_status(state.status)}")
 
-        if self.last_from is not None and self.last_to is not None:
-            self.last_move_var.set(
-                "Last move: "
-                f"{self.last_from.to_chess_notation()}{self.last_to.to_chess_notation()}"
-            )
+        history = self.controller.get_move_history()
+        if history:
+            self.last_move_var.set(f"Last move: {history[-1].notation}")
         else:
             self.last_move_var.set("Last move: —")
 
         search = self.controller.get_last_search_result()
         if ai_line is not None:
             self.ai_info_var.set(ai_line)
-        elif search and search.best_move is not None:
-            notation = (
-                f"{search.best_move.from_position.to_chess_notation()}"
-                f"{search.best_move.to_position.to_chess_notation()}"
-            )
-            self.ai_info_var.set(f"AI: {notation} (score {search.best_score})")
         else:
-            self.ai_info_var.set("AI: waiting")
+            ai_entries = [entry for entry in history if not entry.by_player]
+            if search is not None and ai_entries:
+                self.ai_info_var.set(
+                    f"AI: {ai_entries[-1].notation} (score {search.best_score})"
+                )
+            else:
+                self.ai_info_var.set("AI: waiting")
 
         if search is not None:
             self.stats_var.set(
@@ -694,13 +728,16 @@ class ChessGuiApp:
         )
 
         self.move_list.delete(0, tk.END)
-        history = self.controller.get_move_history()
         for index in range(0, len(history), 2):
             white = history[index].notation
             black = history[index + 1].notation if index + 1 < len(history) else ""
             self.move_list.insert(tk.END, f"{index // 2 + 1}. {white}  {black}")
         if history:
             self.move_list.see(tk.END)
+
+        self.undo_btn.configure(
+            state=("normal" if self.controller.can_undo() and not self._busy() else "disabled")
+        )
 
         if message is not None:
             self.hint_var.set(message)
