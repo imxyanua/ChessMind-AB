@@ -407,7 +407,15 @@ class ChessGuiApp:
             self.root.after(40, self._run_ai_move)
 
     def _run_ai_move(self) -> None:
-        result = self.controller.make_ai_move()
+        try:
+            result = self.controller.make_ai_move()
+        except Exception as exc:  # noqa: BLE001 - keep UI responsive on search bugs
+            self._ai_busy = False
+            self._redraw()
+            self._refresh_panel(message=f"AI error: {exc}")
+            messagebox.showerror("AI error", str(exc))
+            return
+
         self._ai_busy = False
         search = self.controller.get_last_search_result()
         if result.success and search and search.best_move is not None:
