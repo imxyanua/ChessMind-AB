@@ -14,9 +14,12 @@ def test_run_demo_produces_board_and_ai_move() -> None:
 
 def test_benchmark_rows_compare_algorithms() -> None:
     rows = run_benchmark(depth=1)
-    assert len(rows) == 3
-    scores = {row.score for row in rows}
-    assert len(scores) == 1
+    assert len(rows) == 15  # 5 positions x 3 algorithms
+    by_pos: dict[str, set[int]] = {}
+    for row in rows:
+        by_pos.setdefault(row.name, set()).add(row.score)
+    assert all(len(scores) == 1 for scores in by_pos.values())
     text = format_benchmark(rows)
     assert "Minimax" in text
     assert "AlphaBeta" in text
+    assert "T1-opening" in text

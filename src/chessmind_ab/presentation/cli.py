@@ -83,10 +83,16 @@ def main(argv: list[str] | None = None) -> int:
         "command",
         nargs="?",
         default="gui",
-        choices=["gui", "demo", "play"],
-        help="gui = graphical window (default); demo/play = terminal helpers",
+        choices=["gui", "demo", "play", "benchmark"],
+        help="gui/demo/play/benchmark",
     )
     parser.add_argument("--depth", type=int, default=3)
+    parser.add_argument(
+        "--out",
+        type=str,
+        default="benchmark_results.csv",
+        help="CSV output path for benchmark command",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "gui":
@@ -97,6 +103,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "demo":
         print(run_demo(depth=args.depth))
+        return 0
+
+    if args.command == "benchmark":
+        from pathlib import Path
+
+        from chessmind_ab.search.benchmark import (
+            format_benchmark_table,
+            run_benchmark,
+            write_benchmark_csv,
+        )
+
+        # Keep experimental runs practical; depth 1-2 recommended.
+        depth = args.depth if args.depth >= 1 else 1
+        rows = run_benchmark(depth=depth)
+        print(format_benchmark_table(rows))
+        out = write_benchmark_csv(rows, Path(args.out))
+        print(f"\nWrote CSV: {out.resolve()}")
         return 0
 
     controller = GameController(ai_depth=args.depth)
