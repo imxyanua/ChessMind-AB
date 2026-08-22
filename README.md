@@ -42,10 +42,10 @@ How to play:
 5. **Undo** reverts the last player+AI turn.
 6. In play mode the AI may vary among near-equal best moves.
 
-Regenerate piece sprites (optional):
+Refresh piece sprites (Wikipedia set via chessboardjs assets):
 
 ```bash
-python scripts/generate_piece_sprites.py
+python scripts/fetch_piece_sprites.py
 ```
 
 ## Run tests
