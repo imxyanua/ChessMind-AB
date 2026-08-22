@@ -18,10 +18,14 @@ from chessmind_ab.domain.position import Position
 from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.search.alpha_beta import AlphaBetaSearch
 from chessmind_ab.search.move_ordering import MoveOrdering
+from chessmind_ab.search.opening_book import OpeningBook
 from chessmind_ab.search.protocol import SearchAlgorithm
 from chessmind_ab.search.search_result import SearchResult
+from chessmind_ab.search.search_statistics import SearchStatistics
 
 _PLAY_DIVERSITY_WINDOW = 35
+_EARLY_DIVERSITY_WINDOW = 80
+_EARLY_PLY_LIMIT = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,11 +58,13 @@ class GameController:
         ai_depth: int = 3,
         player_color: Color = Color.WHITE,
     ) -> None:
+        self._rng = random.Random()
         self._search = search or AlphaBetaSearch(
             move_ordering=MoveOrdering(),
             diversity_window=_PLAY_DIVERSITY_WINDOW,
-            rng=random.Random(),
+            rng=self._rng,
         )
+        self._opening_book = OpeningBook(max_ply=8)
         self._ai_depth = ai_depth
         self._player_color = player_color
         self._state = create_initial_game_state()
@@ -195,7 +201,29 @@ class GameController:
         if self._state.side_to_move is self._player_color:
             return MoveResult(False, "Not AI turn", self._state)
 
-        result = self._search.find_best_move(self._state, self._ai_depth)
+        book_move = self._opening_book.suggest(self._state, self._rng)
+        if book_move is not None:
+            self._last_search_result = SearchResult(
+                best_move=book_move,
+                best_score=0,
+                statistics=SearchStatistics(),
+            )
+            self._state = StateTransition.apply(self._state, book_move)
+            self._state.status = GameStatusEvaluator.evaluate(self._state)
+            self._record_move(book_move, by_player=False)
+            return MoveResult(True, "AI book move", self._state)
+
+        diversity = (
+            _EARLY_DIVERSITY_WINDOW
+            if self._state.ply_count < _EARLY_PLY_LIMIT
+            else _PLAY_DIVERSITY_WINDOW
+        )
+        if isinstance(self._search, AlphaBetaSearch):
+            result = self._search.find_best_move(
+                self._state, self._ai_depth, diversity_window=diversity
+            )
+        else:
+            result = self._search.find_best_move(self._state, self._ai_depth)
         self._last_search_result = result
         if result.best_move is None:
             self._state.status = GameStatusEvaluator.evaluate(self._state)

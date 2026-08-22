@@ -33,9 +33,18 @@ class AlphaBetaSearch:
         self._diversity_window = max(0, diversity_window)
         self._rng = rng
 
-    def find_best_move(self, state: GameState, depth: int) -> SearchResult:
+    def find_best_move(
+        self,
+        state: GameState,
+        depth: int,
+        diversity_window: int | None = None,
+    ) -> SearchResult:
         if depth < 1:
             raise ValueError("depth must be >= 1")
+
+        window = (
+            self._diversity_window if diversity_window is None else max(0, diversity_window)
+        )
 
         stats = SearchStatistics()
         started = time.perf_counter()
@@ -73,7 +82,9 @@ class AlphaBetaSearch:
                     best_score = score
                 beta = min(beta, best_score)
 
-        best_move = self._pick_root_move(state.side_to_move, scored_moves, int(best_score))
+        best_move = self._pick_root_move(
+            state.side_to_move, scored_moves, int(best_score), window
+        )
         stats.max_depth_reached = depth
         stats.execution_time_ms = (time.perf_counter() - started) * 1000
         return SearchResult(
@@ -87,29 +98,29 @@ class AlphaBetaSearch:
         side: Color,
         scored_moves: list[tuple[Move, int]],
         best_score: int,
+        diversity_window: int,
     ) -> Move | None:
         if not scored_moves:
             return None
 
-        if self._diversity_window <= 0 or self._rng is None:
+        if diversity_window <= 0 or self._rng is None:
             # Deterministic tie-break: first move that achieved best_score.
             for move, score in scored_moves:
                 if score == best_score:
                     return move
             return scored_moves[0][0]
 
-        window = self._diversity_window
         if side is Color.WHITE:
             candidates = [
                 move
                 for move, score in scored_moves
-                if score >= best_score - window
+                if score >= best_score - diversity_window
             ]
         else:
             candidates = [
                 move
                 for move, score in scored_moves
-                if score <= best_score + window
+                if score <= best_score + diversity_window
             ]
         if not candidates:
             candidates = [move for move, score in scored_moves if score == best_score]
