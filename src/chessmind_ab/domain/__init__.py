@@ -9,12 +9,17 @@ from chessmind_ab.domain.move_type import MoveType
 from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import InvalidPositionError, Position
+from chessmind_ab.domain.state_transition import (
+    IllegalStateTransitionError,
+    StateTransition,
+)
 
 __all__ = [
     "Board",
     "Color",
     "GameState",
     "GameStatus",
+    "IllegalStateTransitionError",
     "InvalidGameStateError",
     "InvalidMoveError",
     "InvalidPositionError",
@@ -24,4 +29,5 @@ __all__ = [
     "Piece",
     "PieceType",
     "Position",
+    "StateTransition",
 ]
