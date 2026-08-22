@@ -12,14 +12,20 @@ from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
 from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.search.evaluation import EvaluationFunction
+from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.search_result import SearchResult
 from chessmind_ab.search.search_statistics import SearchStatistics
 from chessmind_ab.search.terminal import terminal_score
 
 
 class AlphaBetaSearch:
-    def __init__(self, evaluation: EvaluationFunction | None = None) -> None:
+    def __init__(
+        self,
+        evaluation: EvaluationFunction | None = None,
+        move_ordering: MoveOrdering | None = None,
+    ) -> None:
         self._evaluation = evaluation or EvaluationFunction()
+        self._move_ordering = move_ordering
 
     def find_best_move(self, state: GameState, depth: int) -> SearchResult:
         if depth < 1:
@@ -39,6 +45,8 @@ class AlphaBetaSearch:
             )
 
         moves = LegalMoveGenerator.generate(state)
+        if self._move_ordering is not None:
+            moves = self._move_ordering.order(state, moves)
         stats.generated_moves += len(moves)
         best_move: Move | None = None
         alpha = float("-inf")
@@ -87,6 +95,8 @@ class AlphaBetaSearch:
             return self._evaluation.evaluate(state)
 
         moves = LegalMoveGenerator.generate(state)
+        if self._move_ordering is not None:
+            moves = self._move_ordering.order(state, moves)
         stats.generated_moves += len(moves)
 
         if state.side_to_move is Color.WHITE:
