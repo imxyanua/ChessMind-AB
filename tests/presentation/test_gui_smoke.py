@@ -40,3 +40,14 @@ def test_ai_async_helpers_exist(tk_root) -> None:
     app._start_thinking_pulse()
     app._stop_thinking_pulse()
     app._ai_busy = False
+
+
+def test_pgn_and_undo_controls_exist(tk_root) -> None:
+    app = ChessGuiApp(tk_root, difficulty_key="beginner")
+    assert hasattr(app, "_on_copy_pgn")
+    assert hasattr(app, "_on_save_pgn")
+    assert str(app.undo_btn.cget("state")) == "disabled"
+    pgn = app.controller.to_pgn()
+    assert '[Event "ChessMind-AB Game"]' in pgn
+    app._on_copy_pgn()
+    assert "clipboard" in app.hint_var.get().lower() or "PGN" in app.hint_var.get()

@@ -21,6 +21,7 @@ from chessmind_ab.application.difficulty import (
     Difficulty,
     get_difficulty,
 )
+from chessmind_ab.application.pgn import build_pgn, format_san
 from chessmind_ab.search.alpha_beta import AlphaBetaSearch
 from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.opening_book import OpeningBook
@@ -111,6 +112,19 @@ class GameController:
     def can_undo(self) -> bool:
         return bool(self._undo_stack)
 
+    def to_pgn(
+        self,
+        *,
+        white: str = "Player",
+        black: str = "ChessMind-AB",
+    ) -> str:
+        return build_pgn(
+            [entry.notation for entry in self._history],
+            self._state.status,
+            white=white,
+            black=black,
+        )
+
     def set_ai_depth(self, depth: int) -> None:
         if depth < 1:
             raise ValueError("depth must be >= 1")
@@ -147,13 +161,8 @@ class GameController:
         self._captured_by_black = snap.captured_black
         return MoveResult(True, "Undone", self._state)
 
-    def _record_move(self, move: Move, by_player: bool) -> None:
-        notation = (
-            f"{move.from_position.to_chess_notation()}"
-            f"{move.to_position.to_chess_notation()}"
-        )
-        if move.promotion_piece is not None:
-            notation += f"={move.promotion_piece.name[0]}"
+    def _record_move(self, state_before: GameState, move: Move, by_player: bool) -> None:
+        notation = format_san(state_before, move)
         self._history.append(
             HistoryEntry(notation=notation, move=move, by_player=by_player)
         )
@@ -178,9 +187,10 @@ class GameController:
             return MoveResult(False, "Illegal move", self._state)
 
         self._push_undo_snapshot()
+        before = self._state
         self._state = StateTransition.apply(self._state, move)
         self._state.status = GameStatusEvaluator.evaluate(self._state)
-        self._record_move(move, by_player=True)
+        self._record_move(before, move, by_player=True)
         return MoveResult(True, "OK", self._state)
 
     def make_player_move_from_notation(self, from_sq: str, to_sq: str) -> MoveResult:
@@ -224,9 +234,10 @@ class GameController:
                     best_score=0,
                     statistics=SearchStatistics(),
                 )
+                before = self._state
                 self._state = StateTransition.apply(self._state, book_move)
                 self._state.status = GameStatusEvaluator.evaluate(self._state)
-                self._record_move(book_move, by_player=False)
+                self._record_move(before, book_move, by_player=False)
                 return MoveResult(True, "AI book move", self._state)
 
         diversity = (
@@ -247,9 +258,10 @@ class GameController:
 
         # Snapshot already taken on player move; AI continues from that branch.
         # For undo of a full turn (player+AI), one snapshot before player is enough.
+        before = self._state
         self._state = StateTransition.apply(self._state, result.best_move)
         self._state.status = GameStatusEvaluator.evaluate(self._state)
-        self._record_move(result.best_move, by_player=False)
+        self._record_move(before, result.best_move, by_player=False)
         return MoveResult(True, "AI moved", self._state)
 
 

@@ -42,8 +42,9 @@ How to play:
 1. A window opens with the chess board and an info panel.
 2. Pick a **Difficulty** (Elo mode) instead of raw search depth.
 3. Click a white piece, then a marked destination (dot/ring); pieces **slide** to the target.
-4. Switch **Board/UI themes**, view **captured pieces** and **move list**.
+4. Switch **Board/UI themes**, view **captured pieces** and **SAN move list**.
 5. **Undo** reverts the last player+AI turn.
+6. **Copy PGN** / **Save PGN** exports the game in Standard Algebraic Notation.
 
 Refresh piece sprites (Wikipedia set via chessboardjs assets):
 
