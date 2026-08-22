@@ -94,6 +94,13 @@ How to read the verdicts:
 
 Example local run (`--depths 1,2`): H1–H5 all **SUPPORTED** (H5 ~24% reduction at depth 1 vs ~77% at depth 2).
 
+Optional Alpha-Beta debug logging (off by default; forced off for `benchmark`/`report`):
+
+```bash
+python -m chessmind_ab play --debug-search
+# or: set CHESSMIND_DEBUG_SEARCH=1
+```
+
 ## Layout
 
 ```text

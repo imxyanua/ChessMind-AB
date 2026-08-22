@@ -117,7 +117,18 @@ def main(argv: list[str] | None = None) -> int:
         default="1,2",
         help="Comma-separated depths for report command (default: 1,2)",
     )
+    parser.add_argument(
+        "--debug-search",
+        action="store_true",
+        help="Enable Alpha-Beta debug logging (depth/move/alpha/beta/score/cutoff)",
+    )
     args = parser.parse_args(argv)
+
+    from chessmind_ab.search.debug_log import configure_from_env, set_debug_search
+
+    configure_from_env()
+    if args.debug_search:
+        set_debug_search(True)
 
     if args.command == "gui":
         from chessmind_ab.presentation.gui import run_gui
@@ -138,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
             write_benchmark_csv,
         )
 
+        # Benchmarks stay quiet even if env enabled debug logging.
+        set_debug_search(False)
         # Keep experimental runs practical; depth 1-2 recommended.
         depth = args.depth if args.depth is not None and args.depth >= 1 else 1
         rows = run_benchmark(depth=depth)
@@ -151,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from chessmind_ab.search.experiment_report import write_report
 
+        set_debug_search(False)
         depths = [int(part.strip()) for part in args.depths.split(",") if part.strip()]
         if args.depth is not None:
             depths = [args.depth]

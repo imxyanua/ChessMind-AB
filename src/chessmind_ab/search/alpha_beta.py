@@ -12,6 +12,7 @@ from chessmind_ab.domain.game_status_evaluator import GameStatusEvaluator
 from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
 from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.state_transition import StateTransition
+from chessmind_ab.search.debug_log import log_search, move_label
 from chessmind_ab.search.evaluation import EvaluationFunction
 from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.quiescence import quiescence
@@ -73,6 +74,14 @@ class AlphaBetaSearch:
             child = StateTransition.apply(state, move)
             score = self._search(child, depth - 1, 1, alpha, beta, stats)
             scored_moves.append((move, score))
+            log_search(
+                depth=depth,
+                move=move_label(move),
+                alpha=alpha,
+                beta=beta,
+                score=score,
+                cutoff=False,
+            )
             if state.side_to_move is Color.WHITE:
                 if score > best_score:
                     best_score = score
@@ -167,8 +176,17 @@ class AlphaBetaSearch:
                 best = max(best, score)
                 alpha = max(alpha, best)
                 if alpha >= beta:
-                    if index < len(moves) - 1:
+                    cutoff = index < len(moves) - 1
+                    if cutoff:
                         stats.cutoffs += 1
+                    log_search(
+                        depth=depth,
+                        move=move_label(move),
+                        alpha=alpha,
+                        beta=beta,
+                        score=score,
+                        cutoff=cutoff,
+                    )
                     break
             return int(best)
 
@@ -181,7 +199,16 @@ class AlphaBetaSearch:
             best = min(best, score)
             beta = min(beta, best)
             if alpha >= beta:
-                if index < len(moves) - 1:
+                cutoff = index < len(moves) - 1
+                if cutoff:
                     stats.cutoffs += 1
+                log_search(
+                    depth=depth,
+                    move=move_label(move),
+                    alpha=alpha,
+                    beta=beta,
+                    score=score,
+                    cutoff=cutoff,
+                )
                 break
         return int(best)
