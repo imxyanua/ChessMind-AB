@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -81,6 +82,8 @@ class ChessGuiApp:
         self._hover: Position | None = None
         self._hidden_positions: set[Position] = set()
         self._floating: dict[str, object] = {}
+        self._think_job: object | None = None
+        self._think_dots = 0
 
         self._build_layout()
         self._apply_theme_styles()
@@ -455,6 +458,36 @@ class ChessGuiApp:
         self._redraw()
         self._refresh_panel(message=f"Selected {clicked.to_chess_notation()}.")
 
+    def _set_interactive_controls(self, enabled: bool) -> None:
+        state = "readonly" if enabled else "disabled"
+        try:
+            self.difficulty_box.configure(state=state)
+        except tk.TclError:
+            pass
+
+    def _start_thinking_pulse(self) -> None:
+        self._stop_thinking_pulse()
+        self._think_dots = 0
+
+        def pulse() -> None:
+            if not self._ai_busy:
+                return
+            self._think_dots = (self._think_dots + 1) % 4
+            dots = "." * self._think_dots
+            self.hint_var.set(f"AI thinking{dots} (UI still responsive)")
+            self.turn_var.set("Turn: Black (AI thinking)")
+            self._think_job = self.root.after(350, pulse)
+
+        pulse()
+
+    def _stop_thinking_pulse(self) -> None:
+        if self._think_job is not None:
+            try:
+                self.root.after_cancel(self._think_job)
+            except Exception:
+                pass
+            self._think_job = None
+
     def _maybe_finish_or_ai(self) -> None:
         state = self.controller.get_state()
         if state.status is not GameStatus.ONGOING:
@@ -462,21 +495,39 @@ class ChessGuiApp:
             return
         if state.side_to_move is Color.BLACK:
             self._ai_busy = True
-            self._refresh_panel(message="AI thinking...")
-            self.root.after(30, self._run_ai_move)
+            self._set_interactive_controls(False)
+            self._refresh_panel(message="AI thinking... (UI still responsive)")
+            self._start_thinking_pulse()
+            self.root.after(20, self._run_ai_move_async)
 
-    def _run_ai_move(self) -> None:
-        try:
-            result = self.controller.make_ai_move()
-        except Exception as exc:  # noqa: BLE001
+    def _run_ai_move_async(self) -> None:
+        def worker() -> None:
+            result = None
+            search = None
+            error: Exception | None = None
+            try:
+                result = self.controller.make_ai_move()
+                search = self.controller.get_last_search_result()
+            except Exception as exc:  # noqa: BLE001 - surfaced on UI thread
+                error = exc
+            self.root.after(
+                0,
+                lambda r=result, s=search, e=error: self._on_ai_search_finished(r, s, e),
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_ai_search_finished(self, result, search, error: Exception | None) -> None:
+        self._stop_thinking_pulse()
+        if error is not None:
             self._ai_busy = False
+            self._set_interactive_controls(True)
             self._redraw()
-            self._refresh_panel(message=f"AI error: {exc}")
-            messagebox.showerror("AI error", str(exc))
+            self._refresh_panel(message=f"AI error: {error}")
+            messagebox.showerror("AI error", str(error))
             return
 
-        search = self.controller.get_last_search_result()
-        if result.success and search and search.best_move is not None:
+        if result is not None and result.success and search and search.best_move is not None:
             move = search.best_move
             self.last_from = move.from_position
             self.last_to = move.to_position
@@ -493,13 +544,16 @@ class ChessGuiApp:
             return
 
         self._ai_busy = False
+        self._set_interactive_controls(True)
         self._redraw()
-        self._refresh_panel(message=result.message)
+        message = result.message if result is not None else "AI failed"
+        self._refresh_panel(message=message)
         if self.controller.get_state().status is not GameStatus.ONGOING:
             self._show_game_over()
 
     def _after_ai_move(self, message: str, notation: str, search) -> None:
         self._ai_busy = False
+        self._set_interactive_controls(True)
         self._refresh_panel(
             message=f"AI played {notation}.",
             ai_line=f"AI: {notation} (score {search.best_score})",
