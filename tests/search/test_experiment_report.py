@@ -62,8 +62,13 @@ def test_render_markdown_contains_sections() -> None:
         BenchmarkRow("T", "AlphaBeta", 2, 80, 20, 12, "d1d8", 1.0),
         BenchmarkRow("T", "AlphaBeta+Ordering", 2, 60, 25, 12, "d1d8", 0.8),
     ]
-    hyps = analyze_hypotheses(rows)
-    md = render_markdown(rows, hyps)
+    hyps = {item.key: item for item in analyze_hypotheses(rows)}
+    assert hyps["H1"].supported is True
+    assert hyps["H2"].supported is True
+    assert hyps["H3"].supported is True
+    assert hyps["H4"].supported is True
+    assert hyps["H5"].supported is True
+    md = render_markdown(rows, list(hyps.values()))
     assert "# ChessMind-AB Experimental Report" in md
     assert "### H1" in md
     assert "### H5" in md

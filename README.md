@@ -79,7 +79,20 @@ Generate thesis-style CSV + Markdown (hypotheses H1–H5):
 python -m chessmind_ab report --depths 1,2 --report-dir experiment_out
 ```
 
-Use depth 1-2 for quick runs; higher depths get slow because of quiescence.
+Use **`--depths 1,2`** so H4/H5 can be judged (a single depth leaves them inconclusive).
+Higher depths get slow because of quiescence. Generated files stay local (`experiment_out/` is gitignored).
+
+How to read the verdicts:
+
+| Hypothesis | Meaning |
+|------------|---------|
+| H1 Correctness | Minimax score equals Alpha-Beta score |
+| H2 Search reduction | Alpha-Beta visits ≤ Minimax nodes |
+| H3 Move ordering | Ordered AB visits ≤ plain AB on a majority of cases |
+| H4 Depth | Node count grows when depth increases |
+| H5 Alpha-Beta benefit | Mean pruning gain is clearer on the deeper search |
+
+Example local run (`--depths 1,2`): H1–H5 all **SUPPORTED** (H5 ~24% reduction at depth 1 vs ~77% at depth 2).
 
 ## Layout
 
