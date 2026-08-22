@@ -6,6 +6,7 @@ from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
+from chessmind_ab.domain.pseudo_move_generator import PseudoMoveGenerator
 
 MATERIAL_VALUES = {
     PieceType.PAWN: 100,
@@ -99,6 +100,10 @@ def _pst_value(piece_type: PieceType, color: Color, row: int, column: int) -> in
     return table[7 - row][column]
 
 
+# Small weight so mobility nudges style without overpowering material/PST.
+_MOBILITY_WEIGHT = 4
+
+
 class EvaluationFunction:
     @staticmethod
     def evaluate(state: GameState) -> int:
@@ -115,4 +120,8 @@ class EvaluationFunction:
                     material = MATERIAL_VALUES[piece.type]
                 term = material + pst
                 score += term if piece.color is Color.WHITE else -term
+
+        white_mobility = len(PseudoMoveGenerator.generate(state, Color.WHITE))
+        black_mobility = len(PseudoMoveGenerator.generate(state, Color.BLACK))
+        score += _MOBILITY_WEIGHT * (white_mobility - black_mobility)
         return score

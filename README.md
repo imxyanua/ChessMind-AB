@@ -38,6 +38,7 @@ How to play:
 2. Click a white piece, then click a marked destination (dot/ring).
 3. The AI (Black) replies automatically; panel shows last move, score, nodes, time.
 4. Use **New Game** to restart; change **AI depth** (1-5) as needed.
+5. In play mode the AI may vary among near-equal best moves, so games feel less repetitive.
 
 ## Run tests
 
