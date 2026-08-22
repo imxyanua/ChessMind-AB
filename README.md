@@ -27,20 +27,21 @@ or:
 python -m chessmind_ab
 ```
 
-Optional AI depth:
+Choose an Elo difficulty mode:
 
 ```bash
-python -m chessmind_ab gui --depth 3
+python -m chessmind_ab gui --difficulty medium
 ```
+
+Modes: `beginner` (~600), `easy` (~800), `medium` (~1000), `hard` (~1200), `expert` (~1400).
 
 How to play:
 
 1. A window opens with the chess board and an info panel.
-2. Click a white piece, then click a marked destination (dot/ring).
-3. The AI (Black) replies automatically.
-4. Use the panel to switch **Board/UI themes**, change **AI depth**, view **captured pieces** and **move list**.
+2. Pick a **Difficulty** (Elo mode) instead of raw search depth.
+3. Click a white piece, then a marked destination (dot/ring); pieces **slide** to the target.
+4. Switch **Board/UI themes**, view **captured pieces** and **move list**.
 5. **Undo** reverts the last player+AI turn.
-6. In play mode the AI may vary among near-equal best moves.
 
 Refresh piece sprites (Wikipedia set via chessboardjs assets):
 
