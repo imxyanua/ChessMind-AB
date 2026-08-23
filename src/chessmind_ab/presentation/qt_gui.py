@@ -12,14 +12,15 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
-    QGridLayout,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -111,12 +112,12 @@ class ChessMainWindow(QMainWindow):
 
         board_h = self.board.height()
 
-        # Info card
+        # Info card — scrollable body + reserved Actions footer (no overlap).
         self.info_card = self._card()
-        self.info_card.setFixedWidth(352)
+        self.info_card.setFixedWidth(360)
         self.info_card.setFixedHeight(board_h)
         info_layout = QVBoxLayout(self.info_card)
-        info_layout.setContentsMargins(14, 14, 14, 14)
+        info_layout.setContentsMargins(12, 12, 12, 12)
         info_layout.setSpacing(8)
 
         self.title = QLabel("ChessMind-AB")
@@ -125,7 +126,21 @@ class ChessMainWindow(QMainWindow):
         info_layout.addWidget(self.title)
         info_layout.addWidget(self.subtitle)
 
-        self._section(info_layout, "GAME")
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 8, 0)
+        body_layout.setSpacing(6)
+
+        self._section(body_layout, "GAME")
         self.mode_value = QLabel("")
         self.turn_value = QLabel("White")
         self.status_value = QLabel("Ongoing")
@@ -140,21 +155,22 @@ class ChessMainWindow(QMainWindow):
             ("AI", self.ai_value),
             ("Stats", self.stats_value),
         ):
-            info_layout.addLayout(self._kv(key, label))
+            body_layout.addLayout(self._kv(key, label))
 
         self.ai_badge = QLabel("")
         self.ai_badge.setObjectName("badge")
-        info_layout.addWidget(self.ai_badge)
+        self.ai_badge.setVisible(False)
+        body_layout.addWidget(self.ai_badge)
 
         self.captured_you = QLabel("You  —")
         self.captured_ai = QLabel("AI   —")
-        info_layout.addWidget(self.captured_you)
-        info_layout.addWidget(self.captured_ai)
+        body_layout.addWidget(self.captured_you)
+        body_layout.addWidget(self.captured_ai)
 
-        self._section(info_layout, "SETTINGS")
+        self._section(body_layout, "SETTINGS")
         self.side_box = QComboBox()
         self.side_box.addItems(["White", "Black"])
-        info_layout.addLayout(self._labeled("Play as", self.side_box))
+        body_layout.addLayout(self._labeled("Play as", self.side_box))
         self.side_box.currentTextChanged.connect(self._on_side_changed)
 
         self.diff_box = QComboBox()
@@ -162,27 +178,30 @@ class ChessMainWindow(QMainWindow):
             self.diff_box.addItem(diff.label, diff.key)
         current = get_difficulty(self.controller.get_difficulty().key)
         self.diff_box.setCurrentText(current.label)
-        info_layout.addLayout(self._labeled("Difficulty", self.diff_box))
+        body_layout.addLayout(self._labeled("Difficulty", self.diff_box))
         self.diff_box.currentTextChanged.connect(self._on_difficulty_changed)
 
         self.diff_desc = QLabel(current.description)
         self.diff_desc.setObjectName("key")
         self.diff_desc.setWordWrap(True)
-        self.diff_desc.setFixedHeight(48)
+        self.diff_desc.setMinimumHeight(36)
         self.diff_desc.setAlignment(Qt.AlignmentFlag.AlignTop)
-        info_layout.addWidget(self.diff_desc)
+        body_layout.addWidget(self.diff_desc)
 
         self.board_theme_box = QComboBox()
         self.board_theme_box.addItems(list(BOARD_THEMES.keys()))
-        info_layout.addLayout(self._labeled("Board", self.board_theme_box))
+        body_layout.addLayout(self._labeled("Board", self.board_theme_box))
         self.board_theme_box.currentTextChanged.connect(self._on_board_theme)
 
         self.ui_theme_box = QComboBox()
         self.ui_theme_box.addItems(list(UI_THEMES.keys()))
-        info_layout.addLayout(self._labeled("UI", self.ui_theme_box))
+        body_layout.addLayout(self._labeled("UI", self.ui_theme_box))
         self.ui_theme_box.currentTextChanged.connect(self._on_ui_theme)
+        body_layout.addStretch(1)
 
-        info_layout.addStretch(1)
+        scroll.setWidget(body)
+        info_layout.addWidget(scroll, 1)
+
         self._section(info_layout, "ACTIONS")
         self.new_btn = QPushButton("New Game")
         self.new_btn.setObjectName("primary")
@@ -198,13 +217,19 @@ class ChessMainWindow(QMainWindow):
         self.copy_btn.clicked.connect(self._on_copy_pgn)
         self.save_btn.clicked.connect(self._on_save_pgn)
 
-        actions = QGridLayout()
+        self.actions_panel = QWidget()
+        self.actions_panel.setObjectName("actionsPanel")
+        self.actions_panel.setMinimumHeight(92)
+        self.actions_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        actions = QGridLayout(self.actions_panel)
         actions.setContentsMargins(0, 0, 0, 0)
-        actions.setHorizontalSpacing(10)
-        actions.setVerticalSpacing(10)
+        actions.setHorizontalSpacing(8)
+        actions.setVerticalSpacing(8)
         for btn in (self.new_btn, self.undo_btn, self.copy_btn, self.save_btn):
-            btn.setMinimumHeight(40)
-            btn.setMinimumWidth(150)
+            btn.setFixedHeight(40)
+            btn.setMinimumWidth(0)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         actions.addWidget(self.new_btn, 0, 0)
@@ -213,9 +238,7 @@ class ChessMainWindow(QMainWindow):
         actions.addWidget(self.save_btn, 1, 1)
         actions.setColumnStretch(0, 1)
         actions.setColumnStretch(1, 1)
-        actions.setRowStretch(0, 1)
-        actions.setRowStretch(1, 1)
-        info_layout.addLayout(actions)
+        info_layout.addWidget(self.actions_panel, 0)
         layout.addWidget(self.info_card, 0, Qt.AlignmentFlag.AlignTop)
 
         # History card — same height as info/board so move list can fill.
@@ -290,13 +313,20 @@ class ChessMainWindow(QMainWindow):
                 font-size: 11px;
                 font-weight: 700;
                 letter-spacing: 0.6px;
-                margin-top: 10px;
+                margin-top: 6px;
             }}
             QLabel#badge {{
                 color: {t.accent};
                 background: {t.accent_soft};
                 padding: 6px 8px;
                 border-radius: 6px;
+            }}
+            QScrollArea {{
+                background: transparent;
+                border: none;
+            }}
+            QScrollArea > QWidget > QWidget {{
+                background: transparent;
             }}
             QComboBox, QListWidget {{
                 background: {t.input_bg};
@@ -318,7 +348,7 @@ class ChessMainWindow(QMainWindow):
                 background: {t.button_bg};
                 color: {t.text};
                 border: 1px solid {t.input_border};
-                padding: 10px 12px;
+                padding: 8px 10px;
                 border-radius: 8px;
                 font-weight: 600;
                 font-size: 13px;
@@ -681,6 +711,7 @@ class ChessMainWindow(QMainWindow):
         self._ai_busy = True
         self._set_controls_enabled(False)
         self.ai_badge.setText(" ● AI thinking")
+        self.ai_badge.setVisible(True)
         self._think_dots = 0
         self._think_timer.start(350)
         self._refresh(message="AI thinking... (UI still responsive)")
@@ -699,6 +730,7 @@ class ChessMainWindow(QMainWindow):
     def _stop_think(self) -> None:
         self._think_timer.stop()
         self.ai_badge.setText("")
+        self.ai_badge.setVisible(False)
 
     def _on_ai_ok(self, result, search) -> None:
         self._stop_think()
