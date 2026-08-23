@@ -76,9 +76,9 @@ DIFFICULTIES: dict[str, Difficulty] = {
         depth=5,
         diversity_window=15,
         early_diversity_window=25,
-        use_opening_book=False,
+        use_opening_book=True,
         time_budget_ms=2500,
-        description="Strongest preset (ID + longer think). Background search.",
+        description="Strongest preset (ID + book variety + longer think).",
     ),
 }
 
