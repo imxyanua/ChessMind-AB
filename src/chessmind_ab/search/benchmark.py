@@ -16,6 +16,7 @@ from chessmind_ab.domain.position import Position
 from chessmind_ab.search.alpha_beta import AlphaBetaSearch
 from chessmind_ab.search.minimax import MinimaxSearch
 from chessmind_ab.search.move_ordering import MoveOrdering
+from chessmind_ab.search.transposition_table import TranspositionTable
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,23 +99,36 @@ def benchmark_positions() -> dict[str, GameState]:
     }
 
 
-def _algorithms():
+def _algorithms(*, with_tt: bool = False):
     # Deterministic: no diversity RNG for fair comparison.
-    return [
+    algorithms = [
         ("Minimax", MinimaxSearch()),
         ("AlphaBeta", AlphaBetaSearch()),
         ("AlphaBeta+Ordering", AlphaBetaSearch(move_ordering=MoveOrdering())),
     ]
+    if with_tt:
+        algorithms.append(
+            (
+                "AlphaBeta+Ordering+TT",
+                AlphaBetaSearch(
+                    move_ordering=MoveOrdering(),
+                    transposition_table=TranspositionTable(size_power=16),
+                ),
+            )
+        )
+    return algorithms
 
 
 def run_benchmark(
     depth: int = 2,
     positions: dict[str, GameState] | None = None,
+    *,
+    with_tt: bool = False,
 ) -> list[BenchmarkRow]:
     suite = positions or benchmark_positions()
     rows: list[BenchmarkRow] = []
     for pos_name, state in suite.items():
-        for algo_name, algorithm in _algorithms():
+        for algo_name, algorithm in _algorithms(with_tt=with_tt):
             result = algorithm.find_best_move(state, depth)
             best = "none"
             if result.best_move is not None:

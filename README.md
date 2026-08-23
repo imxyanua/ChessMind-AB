@@ -73,7 +73,10 @@ Compare Minimax / AlphaBeta / AlphaBeta+Ordering (deterministic):
 
 ```bash
 python -m chessmind_ab benchmark --depth 2 --out benchmark_results.csv
+python -m chessmind_ab benchmark --depth 2 --tt --out benchmark_results.csv
 ```
+
+`--tt` adds `AlphaBeta+Ordering+TT` for optional transposition-table comparison. Play mode already uses a TT.
 
 Generate thesis-style CSV + Markdown (hypotheses H1–H5):
 

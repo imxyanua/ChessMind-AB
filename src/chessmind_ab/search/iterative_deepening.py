@@ -34,12 +34,19 @@ def iterative_deepening_search(
     best: SearchResult | None = None
     totals = SearchStatistics()
 
+    # Keep TT warm across deepening iterations.
+    if search._tt is not None:
+        search._tt.clear()
+
     for depth in range(1, max_depth + 1):
         if best is not None and time.perf_counter() >= deadline:
             break
 
         result = search.find_best_move(
-            state, depth, diversity_window=diversity_window
+            state,
+            depth,
+            diversity_window=diversity_window,
+            clear_tt=False,
         )
         totals.nodes_visited += result.statistics.nodes_visited
         totals.evaluated_leaf_nodes += result.statistics.evaluated_leaf_nodes
@@ -67,7 +74,10 @@ def iterative_deepening_search(
 
     if best is None:
         best = search.find_best_move(
-            state, 1, diversity_window=diversity_window
+            state,
+            1,
+            diversity_window=diversity_window,
+            clear_tt=False,
         )
 
     best.statistics.execution_time_ms = (time.perf_counter() - started) * 1000
