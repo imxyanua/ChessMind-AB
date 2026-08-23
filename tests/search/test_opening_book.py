@@ -96,3 +96,24 @@ def test_controller_uses_book_on_first_ai_reply() -> None:
 def test_position_key_stable_for_same_state() -> None:
     state = create_initial_game_state()
     assert position_key(state) == position_key(state)
+
+
+def test_eco_book_is_populated() -> None:
+    from chessmind_ab.search.opening_book import book_size
+    from chessmind_ab.search.opening_lines import ECO_LINES
+
+    positions, entries = book_size()
+    assert len(ECO_LINES) >= 50
+    assert positions >= 100
+    assert entries >= 200
+
+
+def test_eco_lines_all_apply_cleanly() -> None:
+    from chessmind_ab.search.opening_book import _apply_notation
+    from chessmind_ab.search.opening_lines import ECO_LINES
+
+    for name, line in ECO_LINES:
+        state = create_initial_game_state()
+        for notation in line:
+            state = _apply_notation(state, notation)
+        assert name
