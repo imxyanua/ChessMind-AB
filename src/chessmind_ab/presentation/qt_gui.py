@@ -34,33 +34,15 @@ from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.move_type import MoveType
 from chessmind_ab.domain.piece import Piece
-from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
 from chessmind_ab.presentation.qt_board import ChessBoardWidget
-from chessmind_ab.presentation.themes import BOARD_THEMES, UI_THEMES, UiTheme
-
-_PIECE_GLYPHS = {
-    (PieceType.KING, Color.WHITE): "♔",
-    (PieceType.QUEEN, Color.WHITE): "♕",
-    (PieceType.ROOK, Color.WHITE): "♖",
-    (PieceType.BISHOP, Color.WHITE): "♗",
-    (PieceType.KNIGHT, Color.WHITE): "♘",
-    (PieceType.PAWN, Color.WHITE): "♙",
-    (PieceType.KING, Color.BLACK): "♚",
-    (PieceType.QUEEN, Color.BLACK): "♛",
-    (PieceType.ROOK, Color.BLACK): "♜",
-    (PieceType.BISHOP, Color.BLACK): "♝",
-    (PieceType.KNIGHT, Color.BLACK): "♞",
-    (PieceType.PAWN, Color.BLACK): "♟",
-}
-
-
-def piece_glyph(piece: Piece) -> str:
-    return _PIECE_GLYPHS[(piece.type, piece.color)]
-
-
-def format_status(status: GameStatus) -> str:
-    return status.name.replace("_", " ").title()
+from chessmind_ab.presentation.themes import (
+    BOARD_THEMES,
+    DEFAULT_BOARD_FOR_UI,
+    UI_THEMES,
+    UiTheme,
+)
+from chessmind_ab.presentation.ui_common import format_status, piece_glyph
 
 
 class AiWorker(QThread):
@@ -176,6 +158,7 @@ class ChessMainWindow(QMainWindow):
         self.diff_box.currentTextChanged.connect(self._on_difficulty_changed)
 
         self.diff_desc = QLabel(current.description)
+        self.diff_desc.setObjectName("key")
         self.diff_desc.setWordWrap(True)
         self.diff_desc.setFixedHeight(48)
         self.diff_desc.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -225,6 +208,7 @@ class ChessMainWindow(QMainWindow):
         self.move_list.setFont(QFont("Consolas", 11))
         hist_layout.addWidget(self.move_list, 1)
         self.hint = QLabel("Click your piece, then a marked square.")
+        self.hint.setObjectName("key")
         self.hint.setWordWrap(True)
         self.hint.setFixedHeight(48)
         self.hint.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -257,33 +241,80 @@ class ChessMainWindow(QMainWindow):
 
     def _apply_theme(self) -> None:
         t = self.ui_theme
+        self.board.chrome_bg = t.app_bg
         self.setStyleSheet(
             f"""
-            QMainWindow, QWidget {{ background: {t.app_bg}; color: {t.text}; }}
+            QMainWindow, QWidget {{
+                background: {t.app_bg};
+                color: {t.text};
+                font-family: 'Segoe UI';
+            }}
             QFrame#card {{
                 background: {t.card_bg};
                 border: 1px solid {t.card_border};
-                border-radius: 8px;
-                padding: 8px;
+                border-radius: 10px;
             }}
+            QLabel {{ background: transparent; color: {t.text}; }}
             QLabel#key, QLabel#section {{ color: {t.muted}; }}
             QLabel#section {{
-                font-size: 10px;
-                font-weight: 600;
-                margin-top: 8px;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.6px;
+                margin-top: 10px;
             }}
-            QLabel#badge {{ color: {t.accent}; background: {t.accent_soft}; padding: 4px; }}
-            QComboBox, QPushButton, QListWidget {{
-                background: {t.list_bg};
+            QLabel#badge {{
+                color: {t.accent};
+                background: {t.accent_soft};
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+            QComboBox, QListWidget {{
+                background: {t.input_bg};
                 color: {t.text};
-                border: 1px solid {t.card_border};
-                padding: 6px;
-                border-radius: 4px;
+                border: 1px solid {t.input_border};
+                padding: 6px 8px;
+                border-radius: 6px;
+                selection-background-color: {t.accent};
+                selection-color: #ffffff;
             }}
-            QPushButton:hover {{ border-color: {t.accent}; }}
-            QListWidget::item:selected {{ background: {t.accent}; }}
+            QComboBox QAbstractItemView {{
+                background: {t.card_bg};
+                color: {t.text};
+                border: 1px solid {t.input_border};
+                selection-background-color: {t.accent};
+                selection-color: #ffffff;
+            }}
+            QPushButton {{
+                background: {t.button_bg};
+                color: {t.text};
+                border: 1px solid {t.input_border};
+                padding: 8px 10px;
+                border-radius: 6px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {t.button_hover};
+                border-color: {t.accent};
+            }}
+            QPushButton:disabled {{
+                color: {t.muted};
+                background: {t.list_bg};
+            }}
+            QListWidget {{
+                background: {t.list_bg};
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: 4px 6px;
+                color: {t.text};
+            }}
+            QListWidget::item:selected {{
+                background: {t.accent};
+                color: #ffffff;
+            }}
             """
         )
+        self.board.update()
 
     def _busy(self) -> bool:
         return self._ai_busy
@@ -385,6 +416,12 @@ class ChessMainWindow(QMainWindow):
 
     def _on_ui_theme(self, name: str) -> None:
         self.ui_theme = UI_THEMES[name]
+        preferred = DEFAULT_BOARD_FOR_UI.get(name)
+        if preferred and preferred in BOARD_THEMES:
+            self.board_theme_box.blockSignals(True)
+            self.board_theme_box.setCurrentText(preferred)
+            self.board_theme_box.blockSignals(False)
+            self.board.set_theme(preferred)
         self._apply_theme()
         self._refresh()
 
