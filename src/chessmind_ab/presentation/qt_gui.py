@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont
@@ -81,6 +82,7 @@ class ChessMainWindow(QMainWindow):
         self.last_from: Position | None = None
         self.last_to: Position | None = None
         self._ai_busy = False
+        self._animating = False
         self._worker: AiWorker | None = None
         self._think_dots = 0
         self._think_timer = QTimer(self)
@@ -111,7 +113,7 @@ class ChessMainWindow(QMainWindow):
 
         # Info card
         self.info_card = self._card()
-        self.info_card.setFixedWidth(340)
+        self.info_card.setFixedWidth(352)
         self.info_card.setFixedHeight(board_h)
         info_layout = QVBoxLayout(self.info_card)
         info_layout.setContentsMargins(14, 14, 14, 14)
@@ -180,22 +182,30 @@ class ChessMainWindow(QMainWindow):
         info_layout.addLayout(self._labeled("UI", self.ui_theme_box))
         self.ui_theme_box.currentTextChanged.connect(self._on_ui_theme)
 
+        info_layout.addStretch(1)
         self._section(info_layout, "ACTIONS")
         self.new_btn = QPushButton("New Game")
+        self.new_btn.setObjectName("primary")
         self.undo_btn = QPushButton("Undo")
         self.copy_btn = QPushButton("Copy PGN")
         self.save_btn = QPushButton("Save PGN")
+        self.new_btn.setToolTip("Start a new game with current settings")
+        self.undo_btn.setToolTip("Undo the last full turn (you + AI)")
+        self.copy_btn.setToolTip("Copy the game PGN to the clipboard")
+        self.save_btn.setToolTip("Save the game PGN to a file")
         self.new_btn.clicked.connect(self._on_new_game)
         self.undo_btn.clicked.connect(self._on_undo)
         self.copy_btn.clicked.connect(self._on_copy_pgn)
         self.save_btn.clicked.connect(self._on_save_pgn)
 
         actions = QGridLayout()
-        actions.setHorizontalSpacing(8)
-        actions.setVerticalSpacing(8)
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setHorizontalSpacing(10)
+        actions.setVerticalSpacing(10)
         for btn in (self.new_btn, self.undo_btn, self.copy_btn, self.save_btn):
-            btn.setMinimumHeight(38)
-            btn.setMinimumWidth(140)
+            btn.setMinimumHeight(40)
+            btn.setMinimumWidth(150)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         actions.addWidget(self.new_btn, 0, 0)
         actions.addWidget(self.undo_btn, 0, 1)
@@ -203,8 +213,9 @@ class ChessMainWindow(QMainWindow):
         actions.addWidget(self.save_btn, 1, 1)
         actions.setColumnStretch(0, 1)
         actions.setColumnStretch(1, 1)
+        actions.setRowStretch(0, 1)
+        actions.setRowStretch(1, 1)
         info_layout.addLayout(actions)
-        info_layout.addStretch(1)
         layout.addWidget(self.info_card, 0, Qt.AlignmentFlag.AlignTop)
 
         # History card — same height as info/board so move list can fill.
@@ -307,18 +318,36 @@ class ChessMainWindow(QMainWindow):
                 background: {t.button_bg};
                 color: {t.text};
                 border: 1px solid {t.input_border};
-                padding: 10px 14px;
-                border-radius: 6px;
+                padding: 10px 12px;
+                border-radius: 8px;
                 font-weight: 600;
-                min-width: 132px;
+                font-size: 13px;
             }}
             QPushButton:hover {{
                 background: {t.button_hover};
                 border-color: {t.accent};
             }}
+            QPushButton:pressed {{
+                background: {t.accent_soft};
+            }}
             QPushButton:disabled {{
                 color: {t.muted};
                 background: {t.list_bg};
+            }}
+            QPushButton#primary {{
+                background: {t.accent};
+                color: #ffffff;
+                border: 1px solid {t.accent};
+            }}
+            QPushButton#primary:hover {{
+                background: {t.button_hover};
+                border-color: {t.accent};
+                color: {t.text};
+            }}
+            QPushButton#primary:disabled {{
+                color: {t.muted};
+                background: {t.list_bg};
+                border-color: {t.input_border};
             }}
             QListWidget {{
                 background: {t.list_bg};
@@ -337,7 +366,7 @@ class ChessMainWindow(QMainWindow):
         self.board.update()
 
     def _busy(self) -> bool:
-        return self._ai_busy
+        return self._ai_busy or self._animating
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for widget in (
@@ -351,6 +380,38 @@ class ChessMainWindow(QMainWindow):
             self.save_btn,
         ):
             widget.setEnabled(enabled)
+        if enabled and not self._busy():
+            self.undo_btn.setEnabled(self.controller.can_undo())
+
+    def _animate_then(
+        self,
+        piece: Piece,
+        from_pos: Position,
+        to_pos: Position,
+        *,
+        message: str,
+        after: Callable[[], None] | None = None,
+    ) -> None:
+        self._animating = True
+        self._set_controls_enabled(False)
+        # Allow bailing out mid-slide without waiting for AI.
+        self.new_btn.setEnabled(True)
+        self.undo_btn.setEnabled(self.controller.can_undo())
+        self.last_from = from_pos
+        self.last_to = to_pos
+        # Avoid a one-frame flash of the piece already on the destination.
+        self.board.hidden = {from_pos, to_pos}
+        self._refresh(message=message)
+
+        def _done() -> None:
+            self._animating = False
+            self._refresh(message=message)
+            if after is not None:
+                after()
+            if not self._ai_busy:
+                self._set_controls_enabled(True)
+
+        self.board.animate_move(piece, from_pos, to_pos, on_finished=_done)
 
     def _checked_square(self) -> Position | None:
         state = self.controller.get_state()
@@ -417,7 +478,7 @@ class ChessMainWindow(QMainWindow):
         if history:
             self.move_list.scrollToBottom()
 
-        self.undo_btn.setEnabled(self.controller.can_undo() and not self._busy())
+        self.undo_btn.setEnabled(self.controller.can_undo() and not self._ai_busy)
         if message is not None:
             self.hint.setText(message)
 
@@ -454,7 +515,7 @@ class ChessMainWindow(QMainWindow):
         self._refresh(message=f"Difficulty set to {diff.label}.")
 
     def _on_side_changed(self, side: str) -> None:
-        if self._busy():
+        if self._ai_busy:
             color = self.controller.get_player_color()
             self.side_box.blockSignals(True)
             self.side_box.setCurrentText("White" if color is Color.WHITE else "Black")
@@ -470,7 +531,7 @@ class ChessMainWindow(QMainWindow):
         )
 
     def _on_new_game(self) -> None:
-        if self._busy():
+        if self._ai_busy:
             return
         color = self.controller.get_player_color()
         self._start_fresh(
@@ -480,6 +541,8 @@ class ChessMainWindow(QMainWindow):
         )
 
     def _start_fresh(self, message: str) -> None:
+        self.board.cancel_animation(run_callback=False)
+        self._animating = False
         self.controller.start_new_game()
         self.selected = None
         self.targets.clear()
@@ -491,11 +554,13 @@ class ChessMainWindow(QMainWindow):
             self._start_ai()
 
     def _on_undo(self) -> None:
-        if self._busy():
+        if self._ai_busy:
             return
         if not self.controller.can_undo():
             self._refresh(message="Nothing to undo")
             return
+        self.board.cancel_animation(run_callback=False)
+        self._animating = False
         result = self.controller.undo()
         self.selected = None
         self.targets.clear()
@@ -560,6 +625,7 @@ class ChessMainWindow(QMainWindow):
             return
 
         source = self.selected
+        moving = state.board.get_piece(source)
         result = self.controller.make_player_move_from_notation(
             source.to_chess_notation(),
             clicked.to_chess_notation(),
@@ -570,12 +636,22 @@ class ChessMainWindow(QMainWindow):
         if not result.success:
             self._refresh(message=result.message)
             return
-        self.last_from = source
-        self.last_to = clicked
-        self._refresh(
-            message=f"You played {source.to_chess_notation()}{clicked.to_chess_notation()}."
+        message = (
+            f"You played {source.to_chess_notation()}{clicked.to_chess_notation()}."
         )
-        self._maybe_ai_or_end()
+        if moving is None:
+            self.last_from = source
+            self.last_to = clicked
+            self._refresh(message=message)
+            self._maybe_ai_or_end()
+            return
+        self._animate_then(
+            moving,
+            source,
+            clicked,
+            message=message,
+            after=self._maybe_ai_or_end,
+        )
 
     def _select(self, clicked: Position) -> None:
         self.selected = clicked
@@ -627,25 +703,47 @@ class ChessMainWindow(QMainWindow):
     def _on_ai_ok(self, result, search) -> None:
         self._stop_think()
         self._ai_busy = False
-        self._set_controls_enabled(True)
         if result is not None and result.success and search and search.best_move is not None:
             move = search.best_move
-            self.last_from = move.from_position
-            self.last_to = move.to_position
             notation = (
                 f"{move.from_position.to_chess_notation()}"
                 f"{move.to_position.to_chess_notation()}"
             )
-            self._refresh(message=f"AI played {notation}.")
-        else:
-            message = result.message if result is not None else "AI failed"
-            self._refresh(message=message)
+            message = f"AI played {notation}."
+            piece = self.controller.get_state().board.get_piece(move.to_position)
+            if piece is None:
+                self.last_from = move.from_position
+                self.last_to = move.to_position
+                self._set_controls_enabled(True)
+                self._refresh(message=message)
+                if self.controller.get_state().status is not GameStatus.ONGOING:
+                    self._game_over()
+                return
+
+            def _after_ai_anim() -> None:
+                if self.controller.get_state().status is not GameStatus.ONGOING:
+                    self._game_over()
+
+            self._animate_then(
+                piece,
+                move.from_position,
+                move.to_position,
+                message=message,
+                after=_after_ai_anim,
+            )
+            return
+
+        message = result.message if result is not None else "AI failed"
+        self._set_controls_enabled(True)
+        self._refresh(message=message)
         if self.controller.get_state().status is not GameStatus.ONGOING:
             self._game_over()
 
     def _on_ai_err(self, message: str) -> None:
         self._stop_think()
         self._ai_busy = False
+        self._animating = False
+        self.board.cancel_animation(run_callback=False)
         self._set_controls_enabled(True)
         self._refresh(message=f"AI error: {message}")
         QMessageBox.critical(self, "AI error", message)
