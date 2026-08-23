@@ -6,7 +6,8 @@ ChessMind-AB is a chess simulation project that applies Minimax with Alpha-Beta 
 
 - Python 3.11+
 - pytest
-- tkinter GUI with PNG piece sprites
+- **PySide6** desktop GUI (default) with PNG piece sprites
+- Legacy Tkinter GUI available via `--tk`
 - Pillow (optional, only to regenerate piece sprites)
 
 Core rules now include **castling**, **en passant**, and draw detection (**threefold**, **fifty-move**, **insufficient material**), in addition to the original mandatory set.
@@ -23,10 +24,10 @@ python -m pip install -e ".[dev]"
 python -m chessmind_ab gui
 ```
 
-or:
+Legacy Tkinter UI:
 
 ```bash
-python -m chessmind_ab
+python -m chessmind_ab gui --tk
 ```
 
 Choose an Elo difficulty mode:
