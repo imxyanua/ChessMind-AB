@@ -36,9 +36,11 @@ from chessmind_ab.application.game_controller import GameController, material_so
 from chessmind_ab.domain.attack_detector import AttackDetector
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_status import GameStatus
+from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.move_type import MoveType
 from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.position import Position
+from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.presentation.qt_board import ChessBoardWidget
 from chessmind_ab.presentation.themes import (
     BOARD_THEMES,
@@ -413,6 +415,18 @@ class ChessMainWindow(QMainWindow):
         if enabled and not self._busy():
             self.undo_btn.setEnabled(self.controller.can_undo())
 
+    def _extra_slides_for_move(
+        self, move: Move
+    ) -> list[tuple[Piece, Position, Position]]:
+        path = StateTransition.castling_rook_path(move)
+        if path is None:
+            return []
+        rook_from, rook_to = path
+        rook = self.controller.get_state().board.get_piece(rook_to)
+        if rook is None:
+            return []
+        return [(rook, rook_from, rook_to)]
+
     def _animate_then(
         self,
         piece: Piece,
@@ -421,7 +435,9 @@ class ChessMainWindow(QMainWindow):
         *,
         message: str,
         after: Callable[[], None] | None = None,
+        extra_slides: list[tuple[Piece, Position, Position]] | None = None,
     ) -> None:
+        extras = list(extra_slides or [])
         self._animating = True
         self._set_controls_enabled(False)
         # Allow bailing out mid-slide without waiting for AI.
@@ -429,8 +445,12 @@ class ChessMainWindow(QMainWindow):
         self.undo_btn.setEnabled(self.controller.can_undo())
         self.last_from = from_pos
         self.last_to = to_pos
-        # Avoid a one-frame flash of the piece already on the destination.
-        self.board.hidden = {from_pos, to_pos}
+        # Avoid a one-frame flash of pieces already on destinations.
+        hidden = {from_pos, to_pos}
+        for _, src, dst in extras:
+            hidden.add(src)
+            hidden.add(dst)
+        self.board.hidden = hidden
         self._refresh(message=message)
 
         def _done() -> None:
@@ -441,7 +461,13 @@ class ChessMainWindow(QMainWindow):
             if not self._ai_busy:
                 self._set_controls_enabled(True)
 
-        self.board.animate_move(piece, from_pos, to_pos, on_finished=_done)
+        self.board.animate_move(
+            piece,
+            from_pos,
+            to_pos,
+            on_finished=_done,
+            extra_slides=extras or None,
+        )
 
     def _checked_square(self) -> Position | None:
         state = self.controller.get_state()
@@ -675,12 +701,16 @@ class ChessMainWindow(QMainWindow):
             self._refresh(message=message)
             self._maybe_ai_or_end()
             return
+        history = self.controller.get_move_history()
+        last_move = history[-1].move if history else None
+        extras = self._extra_slides_for_move(last_move) if last_move is not None else []
         self._animate_then(
             moving,
             source,
             clicked,
             message=message,
             after=self._maybe_ai_or_end,
+            extra_slides=extras,
         )
 
     def _select(self, clicked: Position) -> None:
@@ -762,6 +792,7 @@ class ChessMainWindow(QMainWindow):
                 move.to_position,
                 message=message,
                 after=_after_ai_anim,
+                extra_slides=self._extra_slides_for_move(move),
             )
             return
 
