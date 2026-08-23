@@ -91,6 +91,14 @@ class ChessGuiApp:
         self._refresh_panel()
 
     def _build_layout(self) -> None:
+        self._style = ttk.Style(self.root)
+        try:
+            self._style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self._style.configure("Panel.TButton", padding=(10, 6))
+        self._style.configure("Panel.TCombobox", padding=4)
+
         self.shell = tk.Frame(self.root, bg=self.ui_theme.app_bg, padx=16, pady=16)
         self.shell.grid(row=0, column=0, sticky="nsew")
 
@@ -111,26 +119,28 @@ class ChessGuiApp:
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Leave>", self._on_leave)
 
-        # Column 2: game info / controls
-        self.panel = tk.Frame(self.shell, bg=self.ui_theme.panel_bg, padx=18, pady=18)
-        self.panel.grid(row=0, column=1, sticky="ns", padx=(16, 0))
-        self.panel.configure(width=300)
-        self.panel.grid_propagate(False)
+        self._theme_surfaces: list[tk.Misc] = []
+        self._section_labels: list[tk.Label] = []
+        self._key_labels: list[tk.Label] = []
+        self._value_labels: list[tk.Label] = []
+        self._card_borders: list[tk.Frame] = []
 
-        # Column 3: move history (tall)
-        self.history_panel = tk.Frame(
-            self.shell, bg=self.ui_theme.panel_bg, padx=16, pady=18
-        )
-        self.history_panel.grid(row=0, column=2, sticky="nsew", padx=(12, 0))
-        self.history_panel.configure(width=280)
-        self.history_panel.grid_propagate(False)
-        self.shell.grid_columnconfigure(2, weight=1)
-        self.shell.grid_rowconfigure(0, weight=1)
+        # Column 2: game info / controls (card)
+        self.panel_border, self.panel = self._make_card(self.shell, width=312)
+        self.panel_border.grid(row=0, column=1, sticky="ns", padx=(16, 0))
+        self.panel_border.configure(height=size)
+        self.panel_border.grid_propagate(False)
+
+        # Column 3: history (card)
+        self.history_border, self.history_panel = self._make_card(self.shell, width=292)
+        self.history_border.grid(row=0, column=2, sticky="ns", padx=(12, 0))
+        self.history_border.configure(height=size)
+        self.history_border.grid_propagate(False)
 
         self.title_label = tk.Label(
             self.panel,
             text="ChessMind-AB",
-            bg=self.ui_theme.panel_bg,
+            bg=self.ui_theme.card_bg,
             fg=self.ui_theme.text,
             font=("Segoe UI Semibold", 16),
             anchor="w",
@@ -138,93 +148,125 @@ class ChessGuiApp:
         self.title_label.pack(fill="x")
         self.subtitle_label = tk.Label(
             self.panel,
-            text="White vs AI  ·  choose an Elo mode",
-            bg=self.ui_theme.panel_bg,
+            text="White vs AI  ·  Elo modes",
+            bg=self.ui_theme.card_bg,
             fg=self.ui_theme.muted,
             font=("Segoe UI", 9),
             anchor="w",
         )
-        self.subtitle_label.pack(fill="x", pady=(0, 12))
+        self.subtitle_label.pack(fill="x", pady=(0, 10))
 
-        self.turn_var = tk.StringVar(value="Turn: White")
-        self.status_var = tk.StringVar(value="Status: Ongoing")
+        self.turn_var = tk.StringVar(value="White")
+        self.status_var = tk.StringVar(value="Ongoing")
         self.mode_var = tk.StringVar(value="")
-        self.last_move_var = tk.StringVar(value="Last move: —")
-        self.ai_info_var = tk.StringVar(value="AI: waiting")
-        self.stats_var = tk.StringVar(value="Nodes: — | Time: —")
+        self.last_move_var = tk.StringVar(value="—")
+        self.ai_info_var = tk.StringVar(value="waiting")
+        self.stats_var = tk.StringVar(value="—")
         self.hint_var = tk.StringVar(value="Click a white piece, then a marked square.")
-        self.captured_white_var = tk.StringVar(value="You captured: —")
-        self.captured_black_var = tk.StringVar(value="AI captured: —")
+        self.captured_white_var = tk.StringVar(value="—")
+        self.captured_black_var = tk.StringVar(value="—")
 
-        self._info_labels: list[tk.Label] = []
-        for var in (
-            self.mode_var,
-            self.turn_var,
-            self.status_var,
-            self.last_move_var,
-            self.ai_info_var,
-            self.stats_var,
-            self.captured_white_var,
-            self.captured_black_var,
+        self._add_section(self.panel, "Game")
+        for key, var in (
+            ("Mode", self.mode_var),
+            ("Turn", self.turn_var),
+            ("Status", self.status_var),
+            ("Last", self.last_move_var),
+            ("AI", self.ai_info_var),
+            ("Stats", self.stats_var),
         ):
-            label = tk.Label(
-                self.panel,
-                textvariable=var,
-                bg=self.ui_theme.panel_bg,
-                fg=self.ui_theme.text,
-                font=("Segoe UI", 10),
-                anchor="w",
-                justify="left",
-                wraplength=260,
-            )
-            label.pack(fill="x", pady=2)
-            self._info_labels.append(label)
+            self._add_kv_row(self.panel, key, var)
 
-        self._divider_info = tk.Frame(self.panel, bg=self.ui_theme.muted, height=1)
-        self._divider_info.pack(fill="x", pady=12)
+        self.ai_badge = tk.Label(
+            self.panel,
+            text="",
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.accent,
+            font=("Segoe UI Semibold", 9),
+            anchor="w",
+        )
+        self.ai_badge.pack(fill="x", pady=(4, 0))
 
-        diff_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        diff_row.pack(fill="x", pady=(0, 8))
-        tk.Label(
+        captured_box = tk.Frame(self.panel, bg=self.ui_theme.card_bg, height=44)
+        captured_box.pack(fill="x", pady=(8, 0))
+        captured_box.pack_propagate(False)
+        self._theme_surfaces.append(captured_box)
+        self.captured_white_label = tk.Label(
+            captured_box,
+            textvariable=self.captured_white_var,
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI", 10),
+            anchor="w",
+        )
+        self.captured_white_label.pack(fill="x")
+        self.captured_black_label = tk.Label(
+            captured_box,
+            textvariable=self.captured_black_var,
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI", 10),
+            anchor="w",
+        )
+        self.captured_black_label.pack(fill="x")
+        self._value_labels.extend([self.captured_white_label, self.captured_black_label])
+
+        self._add_section(self.panel, "Settings")
+
+        diff_row = tk.Frame(self.panel, bg=self.ui_theme.card_bg)
+        diff_row.pack(fill="x", pady=(0, 6))
+        self._theme_surfaces.append(diff_row)
+        diff_key = tk.Label(
             diff_row,
             text="Difficulty",
-            bg=self.ui_theme.panel_bg,
-            fg=self.ui_theme.text,
-            font=("Segoe UI Semibold", 10),
-        ).pack(side=tk.LEFT)
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+        )
+        diff_key.pack(side=tk.LEFT)
+        self._key_labels.append(diff_key)
         current = self.controller.get_difficulty()
         self.difficulty_var = tk.StringVar(value=current.label)
         self.difficulty_box = ttk.Combobox(
             diff_row,
             textvariable=self.difficulty_var,
             values=[d.label for d in DIFFICULTIES.values()],
-            width=20,
+            width=22,
             state="readonly",
+            style="Panel.TCombobox",
         )
         self.difficulty_box.pack(side=tk.RIGHT)
         self.difficulty_var.trace_add("write", lambda *_: self._on_difficulty_changed())
 
+        # Fixed-height description so changing difficulty never reflows the card.
+        desc_box = tk.Frame(self.panel, bg=self.ui_theme.card_bg, height=40)
+        desc_box.pack(fill="x", pady=(0, 8))
+        desc_box.pack_propagate(False)
+        self._theme_surfaces.append(desc_box)
         self.difficulty_desc = tk.Label(
-            self.panel,
+            desc_box,
             text=current.description,
-            bg=self.ui_theme.panel_bg,
+            bg=self.ui_theme.card_bg,
             fg=self.ui_theme.muted,
             font=("Segoe UI", 9),
-            anchor="w",
+            anchor="nw",
             justify="left",
-            wraplength=260,
+            wraplength=270,
         )
-        self.difficulty_desc.pack(fill="x", pady=(0, 10))
+        self.difficulty_desc.pack(fill="both", expand=True)
 
-        theme_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
+        theme_row = tk.Frame(self.panel, bg=self.ui_theme.card_bg)
         theme_row.pack(fill="x", pady=(0, 6))
-        tk.Label(
+        self._theme_surfaces.append(theme_row)
+        board_key = tk.Label(
             theme_row,
             text="Board",
-            bg=self.ui_theme.panel_bg,
-            fg=self.ui_theme.text,
-            font=("Segoe UI", 10),
-        ).pack(side=tk.LEFT)
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+        )
+        board_key.pack(side=tk.LEFT)
+        self._key_labels.append(board_key)
         self.board_theme_var = tk.StringVar(value="green")
         ttk.Combobox(
             theme_row,
@@ -232,18 +274,22 @@ class ChessGuiApp:
             values=list(BOARD_THEMES.keys()),
             width=10,
             state="readonly",
+            style="Panel.TCombobox",
         ).pack(side=tk.RIGHT)
         self.board_theme_var.trace_add("write", lambda *_: self._on_theme_changed())
 
-        ui_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        ui_row.pack(fill="x", pady=(0, 10))
-        tk.Label(
+        ui_row = tk.Frame(self.panel, bg=self.ui_theme.card_bg)
+        ui_row.pack(fill="x", pady=(0, 4))
+        self._theme_surfaces.append(ui_row)
+        ui_key = tk.Label(
             ui_row,
             text="UI",
-            bg=self.ui_theme.panel_bg,
-            fg=self.ui_theme.text,
-            font=("Segoe UI", 10),
-        ).pack(side=tk.LEFT)
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+        )
+        ui_key.pack(side=tk.LEFT)
+        self._key_labels.append(ui_key)
         self.ui_theme_var = tk.StringVar(value="dark")
         ttk.Combobox(
             ui_row,
@@ -251,99 +297,174 @@ class ChessGuiApp:
             values=list(UI_THEMES.keys()),
             width=10,
             state="readonly",
+            style="Panel.TCombobox",
         ).pack(side=tk.RIGHT)
         self.ui_theme_var.trace_add("write", lambda *_: self._on_theme_changed())
 
-        btn_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        btn_row.pack(fill="x", pady=(4, 6))
-        ttk.Button(btn_row, text="New Game", command=self._on_new_game).pack(
-            side=tk.LEFT, expand=True, fill="x", padx=(0, 4)
+        self._add_section(self.panel, "Actions")
+        btn_row = tk.Frame(self.panel, bg=self.ui_theme.card_bg)
+        btn_row.pack(fill="x", pady=(0, 6))
+        self._theme_surfaces.append(btn_row)
+        ttk.Button(
+            btn_row, text="New Game", style="Panel.TButton", command=self._on_new_game
+        ).pack(side=tk.LEFT, expand=True, fill="x", padx=(0, 4))
+        self.undo_btn = ttk.Button(
+            btn_row, text="Undo", style="Panel.TButton", command=self._on_undo
         )
-        self.undo_btn = ttk.Button(btn_row, text="Undo", command=self._on_undo)
         self.undo_btn.pack(side=tk.LEFT, expand=True, fill="x", padx=(4, 0))
 
-        pgn_row = tk.Frame(self.panel, bg=self.ui_theme.panel_bg)
-        pgn_row.pack(fill="x", pady=(0, 4))
-        ttk.Button(pgn_row, text="Copy PGN", command=self._on_copy_pgn).pack(
-            side=tk.LEFT, expand=True, fill="x", padx=(0, 4)
-        )
-        ttk.Button(pgn_row, text="Save PGN", command=self._on_save_pgn).pack(
-            side=tk.LEFT, expand=True, fill="x", padx=(4, 0)
-        )
+        pgn_row = tk.Frame(self.panel, bg=self.ui_theme.card_bg)
+        pgn_row.pack(fill="x")
+        self._theme_surfaces.append(pgn_row)
+        ttk.Button(
+            pgn_row, text="Copy PGN", style="Panel.TButton", command=self._on_copy_pgn
+        ).pack(side=tk.LEFT, expand=True, fill="x", padx=(0, 4))
+        ttk.Button(
+            pgn_row, text="Save PGN", style="Panel.TButton", command=self._on_save_pgn
+        ).pack(side=tk.LEFT, expand=True, fill="x", padx=(4, 0))
 
         # History column
         self.move_list_title = tk.Label(
             self.history_panel,
-            text="Move list (SAN)",
-            bg=self.ui_theme.panel_bg,
+            text="Move list",
+            bg=self.ui_theme.card_bg,
             fg=self.ui_theme.text,
             font=("Segoe UI Semibold", 11),
             anchor="w",
         )
-        self.move_list_title.pack(fill="x", pady=(0, 8))
+        self.move_list_title.pack(fill="x", pady=(0, 2))
+        self.move_list_subtitle = tk.Label(
+            self.history_panel,
+            text="SAN notation",
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 8),
+            anchor="w",
+        )
+        self.move_list_subtitle.pack(fill="x", pady=(0, 8))
 
-        list_frame = tk.Frame(self.history_panel, bg=self.ui_theme.panel_bg)
+        list_frame = tk.Frame(self.history_panel, bg=self.ui_theme.card_bg)
         list_frame.pack(fill="both", expand=True)
+        self._theme_surfaces.append(list_frame)
         self.move_list = tk.Listbox(
             list_frame,
-            height=28,
-            activestyle="dotbox",
+            height=24,
+            activestyle="none",
             font=("Consolas", 11),
-            bg="#1f2330",
+            bg=self.ui_theme.list_bg,
             fg=self.ui_theme.text,
             highlightthickness=0,
             borderwidth=0,
             selectbackground=self.ui_theme.accent,
+            relief="flat",
         )
         scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.move_list.yview)
         self.move_list.configure(yscrollcommand=scroll.set)
         self.move_list.pack(side=tk.LEFT, fill="both", expand=True)
         scroll.pack(side=tk.RIGHT, fill="y")
 
+        hint_box = tk.Frame(self.history_panel, bg=self.ui_theme.card_bg, height=42)
+        hint_box.pack(fill="x", pady=(10, 0))
+        hint_box.pack_propagate(False)
+        self._theme_surfaces.append(hint_box)
         self.hint_label = tk.Label(
-            self.history_panel,
+            hint_box,
             textvariable=self.hint_var,
-            bg=self.ui_theme.panel_bg,
+            bg=self.ui_theme.card_bg,
             fg=self.ui_theme.muted,
             font=("Segoe UI", 9),
+            anchor="nw",
+            justify="left",
+            wraplength=250,
+        )
+        self.hint_label.pack(fill="both", expand=True)
+
+    def _make_card(self, parent: tk.Misc, *, width: int) -> tuple[tk.Frame, tk.Frame]:
+        border = tk.Frame(parent, bg=self.ui_theme.card_border, width=width, padx=1, pady=1)
+        card = tk.Frame(border, bg=self.ui_theme.card_bg, padx=16, pady=14)
+        card.pack(fill="both", expand=True)
+        self._card_borders.append(border)
+        self._theme_surfaces.append(card)
+        return border, card
+
+    def _add_section(self, parent: tk.Misc, title: str) -> None:
+        divider = tk.Frame(parent, bg=self.ui_theme.card_border, height=1)
+        divider.pack(fill="x", pady=(12, 8))
+        self._card_borders.append(divider)
+        label = tk.Label(
+            parent,
+            text=title.upper(),
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI Semibold", 8),
+            anchor="w",
+        )
+        label.pack(fill="x", pady=(0, 6))
+        self._section_labels.append(label)
+        self._theme_surfaces.append(label)
+
+    def _add_kv_row(self, parent: tk.Misc, key: str, value_var: tk.StringVar) -> None:
+        row = tk.Frame(parent, bg=self.ui_theme.card_bg)
+        row.pack(fill="x", pady=2)
+        self._theme_surfaces.append(row)
+        key_label = tk.Label(
+            row,
+            text=key,
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+            width=7,
+            anchor="w",
+        )
+        key_label.pack(side=tk.LEFT)
+        value_label = tk.Label(
+            row,
+            textvariable=value_var,
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.text,
+            font=("Segoe UI", 10),
             anchor="w",
             justify="left",
-            wraplength=240,
+            wraplength=210,
         )
-        self.hint_label.pack(fill="x", pady=(12, 0))
-
-        # Match side-panel height to the board canvas.
-        self.panel.configure(height=size)
-        self.history_panel.configure(height=size)
+        value_label.pack(side=tk.LEFT, fill="x", expand=True)
+        self._key_labels.append(key_label)
+        self._value_labels.append(value_label)
 
     def _apply_theme_styles(self) -> None:
-        self.root.configure(bg=self.ui_theme.app_bg)
-        self.shell.configure(bg=self.ui_theme.app_bg)
-        self.panel.configure(bg=self.ui_theme.panel_bg)
-        self.history_panel.configure(bg=self.ui_theme.panel_bg)
+        theme = self.ui_theme
+        self.root.configure(bg=theme.app_bg)
+        self.shell.configure(bg=theme.app_bg)
         self.canvas.configure(background=self.board_theme.canvas_bg)
-        for widget in (
-            self.title_label,
-            self.subtitle_label,
-            self.hint_label,
-            self.difficulty_desc,
-            self.move_list_title,
-            *self._info_labels,
-        ):
-            widget.configure(bg=self.ui_theme.panel_bg)
-        self.title_label.configure(fg=self.ui_theme.text)
-        self.subtitle_label.configure(fg=self.ui_theme.muted)
-        self.hint_label.configure(fg=self.ui_theme.muted)
-        self.difficulty_desc.configure(fg=self.ui_theme.muted)
-        self.move_list_title.configure(fg=self.ui_theme.text)
-        self._divider_info.configure(bg=self.ui_theme.muted)
-        for label in self._info_labels:
-            label.configure(fg=self.ui_theme.text)
-        list_bg = "#1f2330" if self.ui_theme.name == "dark" else "#f7f8fb"
+        for border in self._card_borders:
+            border.configure(bg=theme.card_border)
+        for surface in self._theme_surfaces:
+            try:
+                surface.configure(bg=theme.card_bg)
+            except tk.TclError:
+                pass
+        self.panel.configure(bg=theme.card_bg)
+        self.history_panel.configure(bg=theme.card_bg)
+        self.title_label.configure(bg=theme.card_bg, fg=theme.text)
+        self.subtitle_label.configure(bg=theme.card_bg, fg=theme.muted)
+        self.move_list_title.configure(bg=theme.card_bg, fg=theme.text)
+        self.move_list_subtitle.configure(bg=theme.card_bg, fg=theme.muted)
+        self.difficulty_desc.configure(bg=theme.card_bg, fg=theme.muted)
+        self.hint_label.configure(bg=theme.card_bg, fg=theme.muted)
+        self.ai_badge.configure(
+            bg=theme.accent_soft if self._ai_busy else theme.card_bg,
+            fg=theme.accent,
+        )
+        for label in self._section_labels:
+            label.configure(bg=theme.card_bg, fg=theme.muted)
+        for label in self._key_labels:
+            label.configure(bg=theme.card_bg, fg=theme.muted)
+        for label in self._value_labels:
+            label.configure(bg=theme.card_bg, fg=theme.text)
         self.move_list.configure(
-            bg=list_bg,
-            fg=self.ui_theme.text,
-            selectbackground=self.ui_theme.accent,
+            bg=theme.list_bg,
+            fg=theme.text,
+            selectbackground=theme.accent,
         )
 
     def _on_theme_changed(self) -> None:
@@ -539,12 +660,18 @@ class ChessGuiApp:
             self._think_dots = (self._think_dots + 1) % 4
             dots = "." * self._think_dots
             self.hint_var.set(f"AI thinking{dots} (UI still responsive)")
-            self.turn_var.set("Turn: Black (AI thinking)")
+            self.turn_var.set("Black")
+            self.ai_badge.configure(
+                text=" ● AI thinking",
+                bg=self.ui_theme.accent_soft,
+                fg=self.ui_theme.accent,
+            )
             self._think_job = self.root.after(350, pulse)
 
         pulse()
 
     def _stop_thinking_pulse(self) -> None:
+        self.ai_badge.configure(text="", bg=self.ui_theme.card_bg)
         if self._think_job is not None:
             try:
                 self.root.after_cancel(self._think_job)
@@ -713,53 +840,67 @@ class ChessGuiApp:
     def _refresh_panel(self, message: str | None = None, ai_line: str | None = None) -> None:
         state = self.controller.get_state()
         diff = self.controller.get_difficulty()
-        self.mode_var.set(f"Mode: {diff.label}")
+        self.mode_var.set(diff.label)
         turn = "White" if state.side_to_move is Color.WHITE else "Black"
-        if self._ai_busy:
-            turn = "Black (AI thinking)"
-        self.turn_var.set(f"Turn: {turn}")
-        self.status_var.set(f"Status: {format_status(state.status)}")
+        self.turn_var.set(turn)
+        self.status_var.set(format_status(state.status))
 
         history = self.controller.get_move_history()
         if history:
-            self.last_move_var.set(f"Last move: {history[-1].notation}")
+            self.last_move_var.set(history[-1].notation)
         else:
-            self.last_move_var.set("Last move: —")
+            self.last_move_var.set("—")
 
         search = self.controller.get_last_search_result()
         if ai_line is not None:
-            self.ai_info_var.set(ai_line)
+            # Strip a leading "AI: " if callers still pass the old format.
+            self.ai_info_var.set(ai_line.removeprefix("AI: ").strip())
         else:
             ai_entries = [entry for entry in history if not entry.by_player]
             if search is not None and ai_entries:
                 self.ai_info_var.set(
-                    f"AI: {ai_entries[-1].notation} (score {search.best_score})"
+                    f"{ai_entries[-1].notation}  ·  {search.best_score}"
                 )
             else:
-                self.ai_info_var.set("AI: waiting")
+                self.ai_info_var.set("waiting")
+
+        if self._ai_busy:
+            self.ai_badge.configure(
+                text=" ● AI thinking",
+                bg=self.ui_theme.accent_soft,
+                fg=self.ui_theme.accent,
+            )
+        elif not self.ai_badge.cget("text"):
+            self.ai_badge.configure(bg=self.ui_theme.card_bg)
 
         if search is not None:
             self.stats_var.set(
-                f"Nodes: {search.statistics.nodes_visited} | "
-                f"Time: {search.statistics.execution_time_ms:.0f} ms"
+                f"{search.statistics.nodes_visited} nodes · "
+                f"{search.statistics.execution_time_ms:.0f} ms"
+                + (
+                    f" · d{search.statistics.max_depth_reached}"
+                    if search.statistics.max_depth_reached
+                    else ""
+                )
             )
         else:
-            self.stats_var.set("Nodes: — | Time: —")
+            self.stats_var.set("—")
 
         self.captured_white_var.set(
-            "You captured: "
-            + self._format_captured(self.controller.get_captured_pieces(Color.WHITE))
+            "You  " + self._format_captured(self.controller.get_captured_pieces(Color.WHITE))
         )
         self.captured_black_var.set(
-            "AI captured: "
-            + self._format_captured(self.controller.get_captured_pieces(Color.BLACK))
+            "AI   " + self._format_captured(self.controller.get_captured_pieces(Color.BLACK))
         )
 
         self.move_list.delete(0, tk.END)
         for index in range(0, len(history), 2):
             white = history[index].notation
             black = history[index + 1].notation if index + 1 < len(history) else ""
-            self.move_list.insert(tk.END, f"{index // 2 + 1}. {white}  {black}")
+            line = f"{index // 2 + 1:>2}. {white:<7} {black}"
+            self.move_list.insert(tk.END, line)
+            if (index // 2) % 2 == 1:
+                self.move_list.itemconfigure(tk.END, background=self.ui_theme.row_alt)
         if history:
             self.move_list.see(tk.END)
 
