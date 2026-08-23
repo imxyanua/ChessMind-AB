@@ -41,3 +41,14 @@ def test_qt_play_as_black_flips_board(qapp) -> None:
         window._worker.wait(8000)
         qapp.processEvents()
     window.close()
+
+
+def test_qt_panels_match_board_height_and_actions_are_wide(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    board_h = window.board.height()
+    assert window.info_card.height() == board_h
+    assert window.hist_card.height() == board_h
+    for btn in (window.new_btn, window.undo_btn, window.copy_btn, window.save_btn):
+        assert btn.minimumWidth() >= 140
+        assert btn.minimumHeight() >= 36
+    window.close()
