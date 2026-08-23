@@ -35,6 +35,12 @@ def test_theme_packs_available() -> None:
         assert theme.hover
         assert theme.hint
         assert theme.hint_capture
+    for theme in UI_THEMES.values():
+        assert theme.card_bg
+        assert theme.card_border
+        assert theme.accent_soft
+        assert theme.list_bg
+        assert theme.row_alt
 
 
 def test_piece_image_cache_loads_with_shadow() -> None:

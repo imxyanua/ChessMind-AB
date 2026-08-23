@@ -4,6 +4,7 @@ import tkinter as tk
 
 import pytest
 
+from chessmind_ab.application.difficulty import DIFFICULTIES
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.position import Position
 from chessmind_ab.presentation.gui import ChessGuiApp
@@ -24,7 +25,7 @@ def test_chess_gui_app_builds(tk_root) -> None:
     app = ChessGuiApp(tk_root, difficulty_key="beginner")
     assert app.controller.get_state().ply_count == 0
     assert app.canvas.winfo_exists() == 1
-    assert app.turn_var.get().startswith("Turn:")
+    assert app.turn_var.get() in {"White", "Black"}
     assert "Ongoing" in app.status_var.get()
     assert "Elo" in app.mode_var.get()
     app._refresh_panel(message="Ready")
@@ -74,9 +75,20 @@ def test_wider_three_column_layout(tk_root) -> None:
     app = ChessGuiApp(tk_root, difficulty_key="beginner")
     assert app.panel.winfo_exists() == 1
     assert app.history_panel.winfo_exists() == 1
-    assert int(app.panel.cget("width")) >= 280
-    assert int(app.history_panel.cget("width")) >= 260
+    assert int(app.panel_border.cget("width")) >= 280
+    assert int(app.history_border.cget("width")) >= 260
     assert int(app.move_list.cget("height")) >= 20
     app.ui_theme_var.set("light")
     app._on_theme_changed()
-    assert app.history_panel.cget("bg") == app.ui_theme.panel_bg
+    assert app.history_panel.cget("bg") == app.ui_theme.card_bg
+
+
+def test_difficulty_description_box_stays_fixed(tk_root) -> None:
+    app = ChessGuiApp(tk_root, difficulty_key="beginner")
+    desc_parent = app.difficulty_desc.master
+    assert int(desc_parent.cget("height")) >= 36
+    before = int(desc_parent.cget("height"))
+    for diff in DIFFICULTIES.values():
+        app.difficulty_var.set(diff.label)
+        app.root.update_idletasks()
+        assert int(desc_parent.cget("height")) == before

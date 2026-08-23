@@ -27,9 +27,14 @@ class UiTheme:
     name: str
     app_bg: str
     panel_bg: str
+    card_bg: str
+    card_border: str
     text: str
     muted: str
     accent: str
+    accent_soft: str
+    row_alt: str
+    list_bg: str
 
 
 BOARD_THEMES = {
@@ -68,18 +73,28 @@ BOARD_THEMES = {
 UI_THEMES = {
     "dark": UiTheme(
         name="dark",
-        app_bg="#1b1d24",
-        panel_bg="#252833",
+        app_bg="#15171d",
+        panel_bg="#15171d",
+        card_bg="#222632",
+        card_border="#3a4152",
         text="#e8ecf4",
         muted="#9aa3b5",
         accent="#7aa2ff",
+        accent_soft="#2a3550",
+        row_alt="#1c212c",
+        list_bg="#1a1f2a",
     ),
     "light": UiTheme(
         name="light",
-        app_bg="#eef1f6",
-        panel_bg="#ffffff",
+        app_bg="#e8ecf3",
+        panel_bg="#e8ecf3",
+        card_bg="#ffffff",
+        card_border="#d5dbe8",
         text="#1f2430",
         muted="#667085",
         accent="#3b6ff0",
+        accent_soft="#e8eefc",
+        row_alt="#f4f6fb",
+        list_bg="#f7f8fb",
     ),
 }
