@@ -23,6 +23,7 @@ from chessmind_ab.application.difficulty import (
 )
 from chessmind_ab.application.pgn import build_pgn, format_san
 from chessmind_ab.search.alpha_beta import AlphaBetaSearch
+from chessmind_ab.search.iterative_deepening import iterative_deepening_search
 from chessmind_ab.search.move_ordering import MoveOrdering
 from chessmind_ab.search.opening_book import OpeningBook
 from chessmind_ab.search.protocol import SearchAlgorithm
@@ -246,9 +247,19 @@ class GameController:
             else self._difficulty.diversity_window
         )
         if isinstance(self._search, AlphaBetaSearch):
-            result = self._search.find_best_move(
-                self._state, self._ai_depth, diversity_window=diversity
-            )
+            budget = self._difficulty.time_budget_ms
+            if budget is not None and budget > 0:
+                result = iterative_deepening_search(
+                    self._search,
+                    self._state,
+                    time_budget_ms=float(budget),
+                    max_depth=self._ai_depth,
+                    diversity_window=diversity,
+                )
+            else:
+                result = self._search.find_best_move(
+                    self._state, self._ai_depth, diversity_window=diversity
+                )
         else:
             result = self._search.find_best_move(self._state, self._ai_depth)
         self._last_search_result = result

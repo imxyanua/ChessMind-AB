@@ -35,6 +35,8 @@ python -m chessmind_ab gui --difficulty medium
 
 Modes: `beginner` (~600), `easy` (~800), `medium` (~1000), `hard` (~1200), `expert` (~1400).
 
+Play mode uses **iterative deepening** with a soft time budget per difficulty (max depth still capped by the preset). Benchmarks keep fixed-depth search for fair comparisons.
+
 AI search runs in a **background thread** so the window should stay responsive while thinking.
 
 How to play:

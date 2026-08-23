@@ -19,10 +19,18 @@ def test_five_elo_presets_exist() -> None:
 def test_controller_applies_difficulty() -> None:
     controller = GameController(difficulty_key="beginner")
     assert controller.get_difficulty().key == "beginner"
-    assert controller._ai_depth == 1
+    assert controller._ai_depth == get_difficulty("beginner").depth
+    assert controller.get_difficulty().time_budget_ms is not None
     controller.set_difficulty("hard")
     assert controller.get_difficulty().elo == 1200
-    assert controller._ai_depth == 3
+    assert controller._ai_depth == get_difficulty("hard").depth
+
+
+def test_play_presets_have_time_budgets_for_id() -> None:
+    for key, diff in DIFFICULTIES.items():
+        assert diff.time_budget_ms is not None, key
+        assert diff.time_budget_ms > 0, key
+        assert diff.depth >= 1, key
 
 
 def test_label_roundtrip() -> None:
