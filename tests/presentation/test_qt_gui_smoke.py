@@ -68,12 +68,48 @@ def test_qt_panels_match_board_height_and_actions_are_wide(qapp) -> None:
     board_h = window.board.height()
     assert window.info_card.height() == board_h
     assert window.hist_card.height() == board_h
-    assert window.info_card.width() >= 352
+    assert window.info_card.width() >= 360
     assert window.new_btn.objectName() == "primary"
     for btn in (window.new_btn, window.undo_btn, window.copy_btn, window.save_btn):
-        assert btn.minimumWidth() >= 150
-        assert btn.minimumHeight() >= 40
+        assert btn.height() == 40
         assert btn.toolTip()
+    window.close()
+
+
+def test_qt_action_buttons_do_not_overlap(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    window.show()
+    qapp.processEvents()
+
+    buttons = (window.new_btn, window.undo_btn, window.copy_btn, window.save_btn)
+    rects = []
+    for btn in buttons:
+        assert btn.isVisible()
+        assert btn.width() > 0
+        assert btn.height() == 40
+        top_left = btn.mapTo(window.info_card, btn.rect().topLeft())
+        rects.append(
+            (
+                top_left.x(),
+                top_left.y(),
+                top_left.x() + btn.width(),
+                top_left.y() + btn.height(),
+            )
+        )
+
+    for i, a in enumerate(rects):
+        for j, b in enumerate(rects):
+            if i >= j:
+                continue
+            overlap_x = a[0] < b[2] and b[0] < a[2]
+            overlap_y = a[1] < b[3] and b[1] < a[3]
+            assert not (overlap_x and overlap_y), f"buttons {i} and {j} overlap: {a} vs {b}"
+
+    # 2x2: New/Undo share a row; Copy/Save share the next row with a gap.
+    assert abs(rects[0][1] - rects[1][1]) <= 1
+    assert abs(rects[2][1] - rects[3][1]) <= 1
+    assert rects[2][1] >= rects[0][3] + 6
+    assert window.actions_panel.height() >= 92
     window.close()
 
 
