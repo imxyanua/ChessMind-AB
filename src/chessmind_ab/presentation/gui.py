@@ -64,7 +64,7 @@ class ChessGuiApp:
         self.board_theme: BoardTheme = BOARD_THEMES["green"]
         self.ui_theme: UiTheme = UI_THEMES["dark"]
 
-        self.geometry = BoardGeometry(square_size=88, margin=36)
+        self.geometry = BoardGeometry(square_size=88, margin=36, flipped=False)
         self.piece_images = PieceImageCache(self.geometry.square_size)
         self.controller = GameController(
             difficulty_key=difficulty_key, player_color=Color.WHITE
@@ -148,7 +148,7 @@ class ChessGuiApp:
         self.title_label.pack(fill="x")
         self.subtitle_label = tk.Label(
             self.panel,
-            text="White vs AI  ·  Elo modes",
+            text="Player vs AI  ·  Elo modes",
             bg=self.ui_theme.card_bg,
             fg=self.ui_theme.muted,
             font=("Segoe UI", 9),
@@ -212,6 +212,30 @@ class ChessGuiApp:
         self._value_labels.extend([self.captured_white_label, self.captured_black_label])
 
         self._add_section(self.panel, "Settings")
+
+        side_row = tk.Frame(self.panel, bg=self.ui_theme.card_bg)
+        side_row.pack(fill="x", pady=(0, 6))
+        self._theme_surfaces.append(side_row)
+        side_key = tk.Label(
+            side_row,
+            text="Play as",
+            bg=self.ui_theme.card_bg,
+            fg=self.ui_theme.muted,
+            font=("Segoe UI", 9),
+        )
+        side_key.pack(side=tk.LEFT)
+        self._key_labels.append(side_key)
+        self.side_var = tk.StringVar(value="White")
+        self.side_box = ttk.Combobox(
+            side_row,
+            textvariable=self.side_var,
+            values=["White", "Black"],
+            width=10,
+            state="readonly",
+            style="Panel.TCombobox",
+        )
+        self.side_box.pack(side=tk.RIGHT)
+        self.side_var.trace_add("write", lambda *_: self._on_side_changed())
 
         diff_row = tk.Frame(self.panel, bg=self.ui_theme.card_bg)
         diff_row.pack(fill="x", pady=(0, 6))
@@ -479,9 +503,36 @@ class ChessGuiApp:
         self.difficulty_desc.configure(text=diff.description)
         self._refresh_panel(message=f"Difficulty set to {diff.label}.")
 
+    def _on_side_changed(self) -> None:
+        if self._busy():
+            # Revert combobox if AI/animation is running.
+            color = self.controller.get_player_color()
+            self.side_var.set("White" if color is Color.WHITE else "Black")
+            return
+        color = Color.WHITE if self.side_var.get() == "White" else Color.BLACK
+        self.controller.set_player_color(color)
+        self.geometry.flipped = color is Color.BLACK
+        self._start_fresh_game(
+            message=(
+                "Playing as White. Your move."
+                if color is Color.WHITE
+                else "Playing as Black. AI moves first."
+            )
+        )
+
     def _on_new_game(self) -> None:
         if self._animating:
             return
+        color = self.controller.get_player_color()
+        self._start_fresh_game(
+            message=(
+                "New game started. Your move."
+                if color is Color.WHITE
+                else "New game started. AI moves first."
+            )
+        )
+
+    def _start_fresh_game(self, *, message: str) -> None:
         self.controller.start_new_game()
         self.selected = None
         self.target_squares.clear()
@@ -493,7 +544,12 @@ class ChessGuiApp:
         self._hover = None
         self._hidden_positions.clear()
         self._redraw()
-        self._refresh_panel(message="New game started. White to move.")
+        self._refresh_panel(message=message)
+        if (
+            self.controller.get_state().side_to_move
+            is not self.controller.get_player_color()
+        ):
+            self._maybe_finish_or_ai()
 
     def _on_undo(self) -> None:
         if self._ai_busy or self._animating:
@@ -568,9 +624,10 @@ class ChessGuiApp:
         if self._busy():
             return
         state = self.controller.get_state()
+        player = self.controller.get_player_color()
         if state.status is not GameStatus.ONGOING:
             return
-        if state.side_to_move is not Color.WHITE:
+        if state.side_to_move is not player:
             return
         try:
             clicked = self.geometry.pixels_to_position(event.x, event.y)
@@ -579,8 +636,9 @@ class ChessGuiApp:
 
         if self.selected is None:
             piece = state.board.get_piece(clicked)
-            if piece is None or piece.color is not Color.WHITE:
-                self._refresh_panel(message="Select a white piece.")
+            if piece is None or piece.color is not player:
+                side = "white" if player is Color.WHITE else "black"
+                self._refresh_panel(message=f"Select a {side} piece.")
                 return
             self._select_square(clicked)
             return
@@ -594,7 +652,7 @@ class ChessGuiApp:
             return
 
         piece = state.board.get_piece(clicked)
-        if piece is not None and piece.color is Color.WHITE:
+        if piece is not None and piece.color is player:
             self._select_square(clicked)
             return
 
@@ -638,7 +696,12 @@ class ChessGuiApp:
         self.capture_targets = {
             move.to_position
             for move in legal
-            if move.move_type in {MoveType.CAPTURE, MoveType.PROMOTION_CAPTURE}
+            if move.move_type
+            in {
+                MoveType.CAPTURE,
+                MoveType.PROMOTION_CAPTURE,
+                MoveType.EN_PASSANT,
+            }
         }
         self._redraw()
         self._refresh_panel(message=f"Selected {clicked.to_chess_notation()}.")
@@ -647,6 +710,7 @@ class ChessGuiApp:
         state = "readonly" if enabled else "disabled"
         try:
             self.difficulty_box.configure(state=state)
+            self.side_box.configure(state=state)
         except tk.TclError:
             pass
 
@@ -660,7 +724,8 @@ class ChessGuiApp:
             self._think_dots = (self._think_dots + 1) % 4
             dots = "." * self._think_dots
             self.hint_var.set(f"AI thinking{dots} (UI still responsive)")
-            self.turn_var.set("Black")
+            ai_color = self.controller.get_player_color().opposite()
+            self.turn_var.set("White" if ai_color is Color.WHITE else "Black")
             self.ai_badge.configure(
                 text=" ● AI thinking",
                 bg=self.ui_theme.accent_soft,
@@ -684,7 +749,7 @@ class ChessGuiApp:
         if state.status is not GameStatus.ONGOING:
             self._show_game_over()
             return
-        if state.side_to_move is Color.BLACK:
+        if state.side_to_move is not self.controller.get_player_color():
             self._ai_busy = True
             self._set_interactive_controls(False)
             self._refresh_panel(message="AI thinking... (UI still responsive)")
@@ -886,12 +951,11 @@ class ChessGuiApp:
         else:
             self.stats_var.set("—")
 
-        self.captured_white_var.set(
-            "You  " + self._format_captured(self.controller.get_captured_pieces(Color.WHITE))
-        )
-        self.captured_black_var.set(
-            "AI   " + self._format_captured(self.controller.get_captured_pieces(Color.BLACK))
-        )
+        player = self.controller.get_player_color()
+        you = self.controller.get_captured_pieces(player)
+        ai = self.controller.get_captured_pieces(player.opposite())
+        self.captured_white_var.set("You  " + self._format_captured(you))
+        self.captured_black_var.set("AI   " + self._format_captured(ai))
 
         self.move_list.delete(0, tk.END)
         for index in range(0, len(history), 2):
@@ -979,19 +1043,20 @@ class ChessGuiApp:
                         width=2,
                     )
 
-                if column == 0:
+                display_row, display_col = self.geometry.display_row_column(position)
+                if display_col == 0:
                     self.canvas.create_text(
                         margin // 2,
                         (y0 + y1) // 2,
-                        text=str(8 - row),
+                        text=str(8 - position.row),
                         fill=theme.coord,
                         font=("Segoe UI Semibold", 12),
                     )
-                if row == 7:
+                if display_row == 7:
                     self.canvas.create_text(
                         (x0 + x1) // 2,
                         margin + board + margin // 2,
-                        text=chr(ord("a") + column),
+                        text=chr(ord("a") + position.column),
                         fill=theme.coord,
                         font=("Segoe UI Semibold", 12),
                     )

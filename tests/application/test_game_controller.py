@@ -46,3 +46,16 @@ def test_undo_restores_previous_turn() -> None:
     assert undone.success is True
     assert controller.get_state().ply_count == 0
     assert controller.get_move_history() == []
+
+
+def test_play_as_black_ai_moves_first_as_white() -> None:
+    controller = GameController(ai_depth=1, player_color=Color.BLACK)
+    controller.start_new_game()
+    assert controller.get_player_color() is Color.BLACK
+    assert controller.get_state().side_to_move is Color.WHITE
+    ai = controller.make_ai_move()
+    assert ai.success is True
+    assert controller.get_state().side_to_move is Color.BLACK
+    pgn = controller.to_pgn()
+    assert '[White "ChessMind-AB"]' in pgn
+    assert '[Black "Player"]' in pgn
