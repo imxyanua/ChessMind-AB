@@ -9,6 +9,8 @@ ChessMind-AB is a chess simulation project that applies Minimax with Alpha-Beta 
 - tkinter GUI with PNG piece sprites
 - Pillow (optional, only to regenerate piece sprites)
 
+Core rules now include **castling**, **en passant**, and draw detection (**threefold**, **fifty-move**, **insufficient material**), in addition to the original mandatory set.
+
 ## Setup
 
 ```bash

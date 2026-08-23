@@ -10,6 +10,7 @@ from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.game_status_evaluator import GameStatusEvaluator
 from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
 from chessmind_ab.domain.move import Move
+from chessmind_ab.domain.move_type import MoveType
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.state_transition import StateTransition
 
@@ -31,6 +32,26 @@ _PROMO_LETTER = {
 
 def format_san(state_before: GameState, move: Move) -> str:
     """Return Standard Algebraic Notation for ``move`` played from ``state_before``."""
+    if move.move_type is MoveType.CASTLING_KING_SIDE:
+        san = "O-O"
+    elif move.move_type is MoveType.CASTLING_QUEEN_SIDE:
+        san = "O-O-O"
+    else:
+        san = _format_san_body(state_before, move)
+
+    after = StateTransition.apply(state_before, move)
+    after.status = GameStatusEvaluator.evaluate(after)
+    if after.status in {
+        GameStatus.WHITE_WINS_CHECKMATE,
+        GameStatus.BLACK_WINS_CHECKMATE,
+    }:
+        san += "#"
+    elif AttackDetector.is_king_in_check(after, after.side_to_move):
+        san += "+"
+    return san
+
+
+def _format_san_body(state_before: GameState, move: Move) -> str:
     is_capture = move.captured_piece is not None
     piece_type = move.moving_piece.type
     to_sq = move.to_position.to_chess_notation()
@@ -48,16 +69,6 @@ def format_san(state_before: GameState, move: Move) -> str:
         if is_capture:
             san += "x"
         san += to_sq
-
-    after = StateTransition.apply(state_before, move)
-    after.status = GameStatusEvaluator.evaluate(after)
-    if after.status in {
-        GameStatus.WHITE_WINS_CHECKMATE,
-        GameStatus.BLACK_WINS_CHECKMATE,
-    }:
-        san += "#"
-    elif AttackDetector.is_king_in_check(after, after.side_to_move):
-        san += "+"
     return san
 
 

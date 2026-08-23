@@ -27,6 +27,7 @@ def test_ongoing_when_legal_moves_exist() -> None:
         {
             "e1": Piece(type=PieceType.KING, color=Color.WHITE),
             "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "a2": Piece(type=PieceType.PAWN, color=Color.WHITE),
         },
         Color.WHITE,
     )

@@ -17,6 +17,11 @@ _PROMOTION_TYPES = {
 }
 
 _PROMOTION_MOVE_TYPES = {MoveType.PROMOTION, MoveType.PROMOTION_CAPTURE}
+_CAPTURE_MOVE_TYPES = {
+    MoveType.CAPTURE,
+    MoveType.PROMOTION_CAPTURE,
+    MoveType.EN_PASSANT,
+}
 
 
 class InvalidMoveError(ValueError):
@@ -48,10 +53,17 @@ class Move:
                 "promotion_piece is only allowed for promotion move types"
             )
 
-        if self.move_type in {MoveType.CAPTURE, MoveType.PROMOTION_CAPTURE}:
+        if self.move_type in _CAPTURE_MOVE_TYPES:
             if self.captured_piece is None:
                 raise InvalidMoveError("Capture moves require captured_piece")
         elif self.captured_piece is not None:
             raise InvalidMoveError(
                 "captured_piece is only allowed for capture move types"
             )
+
+        if self.move_type in {
+            MoveType.CASTLING_KING_SIDE,
+            MoveType.CASTLING_QUEEN_SIDE,
+        }:
+            if self.moving_piece.type is not PieceType.KING:
+                raise InvalidMoveError("Castling moves require the king")

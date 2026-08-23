@@ -1,4 +1,4 @@
-"""Zobrist hashing for GameState (board + side to move)."""
+"""Zobrist hashing for GameState (board + side + castling + EP)."""
 
 from __future__ import annotations
 
@@ -25,14 +25,16 @@ _PIECE_INDEX = {
 }
 
 
-def _build_tables(seed: int = 0xC0FFEE) -> tuple[list[list[int]], int]:
+def _build_tables(seed: int = 0xC0FFEE) -> tuple[list[list[int]], int, list[int], list[int]]:
     rng = random.Random(seed)
     piece_square = [[rng.getrandbits(64) for _ in range(64)] for _ in range(12)]
     side_to_move = rng.getrandbits(64)
-    return piece_square, side_to_move
+    castling = [rng.getrandbits(64) for _ in range(4)]
+    en_passant_file = [rng.getrandbits(64) for _ in range(8)]
+    return piece_square, side_to_move, castling, en_passant_file
 
 
-_PIECE_SQUARE, _SIDE_TO_MOVE = _build_tables()
+_PIECE_SQUARE, _SIDE_TO_MOVE, _CASTLING, _EN_PASSANT_FILE = _build_tables()
 
 
 def zobrist_hash(state: GameState) -> int:
@@ -48,4 +50,15 @@ def zobrist_hash(state: GameState) -> int:
             value ^= _PIECE_SQUARE[index][square]
     if state.side_to_move is Color.BLACK:
         value ^= _SIDE_TO_MOVE
+    rights = state.castling_rights
+    if rights.white_king_side:
+        value ^= _CASTLING[0]
+    if rights.white_queen_side:
+        value ^= _CASTLING[1]
+    if rights.black_king_side:
+        value ^= _CASTLING[2]
+    if rights.black_queen_side:
+        value ^= _CASTLING[3]
+    if state.en_passant_target is not None:
+        value ^= _EN_PASSANT_FILE[state.en_passant_target.column]
     return value
