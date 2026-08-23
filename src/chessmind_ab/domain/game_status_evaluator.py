@@ -7,11 +7,21 @@ from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
+from chessmind_ab.domain.piece_type import PieceType
+from chessmind_ab.domain.position import Position
+from chessmind_ab.domain.repetition import repetition_key
 
 
 class GameStatusEvaluator:
     @staticmethod
     def evaluate(state: GameState) -> GameStatus:
+        if state.halfmove_clock >= 100:
+            return GameStatus.DRAW
+        if GameStatusEvaluator._is_threefold(state):
+            return GameStatus.DRAW
+        if GameStatusEvaluator._insufficient_material(state):
+            return GameStatus.DRAW
+
         legal_moves = LegalMoveGenerator.generate(state)
         if legal_moves:
             return GameStatus.ONGOING
@@ -22,3 +32,26 @@ class GameStatusEvaluator:
                 return GameStatus.BLACK_WINS_CHECKMATE
             return GameStatus.WHITE_WINS_CHECKMATE
         return GameStatus.STALEMATE
+
+    @staticmethod
+    def _is_threefold(state: GameState) -> bool:
+        key = repetition_key(state)
+        return state.repetition_keys.count(key) >= 3
+
+    @staticmethod
+    def _insufficient_material(state: GameState) -> bool:
+        pieces: list[tuple[PieceType, Color]] = []
+        for row in range(8):
+            for column in range(8):
+                piece = state.board.get_piece(Position(row=row, column=column))
+                if piece is not None:
+                    pieces.append((piece.type, piece.color))
+        non_kings = [item for item in pieces if item[0] is not PieceType.KING]
+        if not non_kings:
+            return True
+        if len(non_kings) == 1 and non_kings[0][0] in {
+            PieceType.KNIGHT,
+            PieceType.BISHOP,
+        }:
+            return True
+        return False

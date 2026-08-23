@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from chessmind_ab.domain.board import Board
+from chessmind_ab.domain.castling_rights import CastlingRights
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.piece_type import PieceType
@@ -21,10 +22,17 @@ class GameState:
     side_to_move: Color
     status: GameStatus
     ply_count: int
+    castling_rights: CastlingRights = CastlingRights()
+    en_passant_target: Position | None = None
+    halfmove_clock: int = 0
+    # Repetition keys since the last irreversible move (includes current).
+    repetition_keys: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.ply_count < 0:
             raise InvalidGameStateError("ply_count must be >= 0")
+        if self.halfmove_clock < 0:
+            raise InvalidGameStateError("halfmove_clock must be >= 0")
         if self.side_to_move is None:
             raise InvalidGameStateError("side_to_move is required")
         if self.status is None:
@@ -36,6 +44,10 @@ class GameState:
             side_to_move=self.side_to_move,
             status=self.status,
             ply_count=self.ply_count,
+            castling_rights=self.castling_rights,
+            en_passant_target=self.en_passant_target,
+            halfmove_clock=self.halfmove_clock,
+            repetition_keys=self.repetition_keys,
         )
 
     def count_kings(self, color: Color) -> int:

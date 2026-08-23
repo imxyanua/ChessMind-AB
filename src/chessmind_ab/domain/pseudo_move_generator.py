@@ -75,9 +75,11 @@ class PseudoMoveGenerator:
                 state, position, piece, _KNIGHT_DELTAS
             )
         if piece.type is PieceType.KING:
-            return PseudoMoveGenerator._step_moves(
+            moves = PseudoMoveGenerator._step_moves(
                 state, position, piece, _KING_DELTAS
             )
+            moves.extend(PseudoMoveGenerator._castling_moves(state, position, piece))
+            return moves
         if piece.type is PieceType.BISHOP:
             return PseudoMoveGenerator._ray_moves(
                 state, position, piece, _BISHOP_DIRS
@@ -150,7 +152,100 @@ class PseudoMoveGenerator:
                         captured_piece=occupant,
                     )
                 )
+
+        # En passant: capture onto the empty EP target square.
+        if state.en_passant_target is not None:
+            ep = state.en_passant_target
+            if ep.row == position.row + direction and abs(ep.column - position.column) == 1:
+                captured_row = position.row
+                captured = state.board.get_piece(
+                    Position(row=captured_row, column=ep.column)
+                )
+                if (
+                    captured is not None
+                    and captured.color is not piece.color
+                    and captured.type is PieceType.PAWN
+                ):
+                    moves.append(
+                        Move(
+                            from_position=position,
+                            to_position=ep,
+                            moving_piece=piece,
+                            move_type=MoveType.EN_PASSANT,
+                            captured_piece=captured,
+                        )
+                    )
         return moves
+
+    @staticmethod
+    def _castling_moves(
+        state: GameState, position: Position, piece: Piece
+    ) -> list[Move]:
+        moves: list[Move] = []
+        rights = state.castling_rights
+        row = position.row
+        if piece.color is Color.WHITE:
+            if row != 7 or position.column != 4:
+                return moves
+            if rights.white_king_side and PseudoMoveGenerator._castle_path_clear(
+                state, row, (5, 6), rook_column=7
+            ):
+                moves.append(
+                    Move(
+                        from_position=position,
+                        to_position=Position(row=row, column=6),
+                        moving_piece=piece,
+                        move_type=MoveType.CASTLING_KING_SIDE,
+                    )
+                )
+            if rights.white_queen_side and PseudoMoveGenerator._castle_path_clear(
+                state, row, (1, 2, 3), rook_column=0
+            ):
+                moves.append(
+                    Move(
+                        from_position=position,
+                        to_position=Position(row=row, column=2),
+                        moving_piece=piece,
+                        move_type=MoveType.CASTLING_QUEEN_SIDE,
+                    )
+                )
+            return moves
+
+        if row != 0 or position.column != 4:
+            return moves
+        if rights.black_king_side and PseudoMoveGenerator._castle_path_clear(
+            state, row, (5, 6), rook_column=7
+        ):
+            moves.append(
+                Move(
+                    from_position=position,
+                    to_position=Position(row=row, column=6),
+                    moving_piece=piece,
+                    move_type=MoveType.CASTLING_KING_SIDE,
+                )
+            )
+        if rights.black_queen_side and PseudoMoveGenerator._castle_path_clear(
+            state, row, (1, 2, 3), rook_column=0
+        ):
+            moves.append(
+                Move(
+                    from_position=position,
+                    to_position=Position(row=row, column=2),
+                    moving_piece=piece,
+                    move_type=MoveType.CASTLING_QUEEN_SIDE,
+                )
+            )
+        return moves
+
+    @staticmethod
+    def _castle_path_clear(
+        state: GameState, row: int, empty_columns: tuple[int, ...], rook_column: int
+    ) -> bool:
+        for column in empty_columns:
+            if state.board.get_piece(Position(row=row, column=column)) is not None:
+                return False
+        rook = state.board.get_piece(Position(row=row, column=rook_column))
+        return rook is not None and rook.type is PieceType.ROOK
 
     @staticmethod
     def _pawn_forward_or_promote(

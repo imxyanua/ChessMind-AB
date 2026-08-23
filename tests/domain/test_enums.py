@@ -40,6 +40,9 @@ def test_move_type_core_set() -> None:
         "PAWN_DOUBLE",
         "PROMOTION",
         "PROMOTION_CAPTURE",
+        "EN_PASSANT",
+        "CASTLING_KING_SIDE",
+        "CASTLING_QUEEN_SIDE",
     }
 
 
