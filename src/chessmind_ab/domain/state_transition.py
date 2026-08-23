@@ -19,6 +19,22 @@ class IllegalStateTransitionError(ValueError):
 
 class StateTransition:
     @staticmethod
+    def castling_rook_path(move: Move) -> tuple[Position, Position] | None:
+        """Return ``(rook_from, rook_to)`` for castling, else ``None``."""
+        row = move.from_position.row
+        if move.move_type is MoveType.CASTLING_KING_SIDE:
+            return (
+                Position(row=row, column=7),
+                Position(row=row, column=5),
+            )
+        if move.move_type is MoveType.CASTLING_QUEEN_SIDE:
+            return (
+                Position(row=row, column=0),
+                Position(row=row, column=3),
+            )
+        return None
+
+    @staticmethod
     def apply(state: GameState, move: Move) -> GameState:
         source_piece = state.board.get_piece(move.from_position)
         if source_piece is None:
@@ -76,19 +92,17 @@ class StateTransition:
             Piece(type=placed_type, color=move.moving_piece.color),
         )
 
-        if move.move_type is MoveType.CASTLING_KING_SIDE:
-            rook_from = Position(row=move.from_position.row, column=7)
-            rook_to = Position(row=move.from_position.row, column=5)
+        rook_path = StateTransition.castling_rook_path(move)
+        if rook_path is not None:
+            rook_from, rook_to = rook_path
             rook = child.board.remove_piece(rook_from)
             if rook is None or rook.type is not PieceType.ROOK:
-                raise IllegalStateTransitionError("Missing kingside rook")
-            child.board.set_piece(rook_to, rook)
-        elif move.move_type is MoveType.CASTLING_QUEEN_SIDE:
-            rook_from = Position(row=move.from_position.row, column=0)
-            rook_to = Position(row=move.from_position.row, column=3)
-            rook = child.board.remove_piece(rook_from)
-            if rook is None or rook.type is not PieceType.ROOK:
-                raise IllegalStateTransitionError("Missing queenside rook")
+                side = (
+                    "kingside"
+                    if move.move_type is MoveType.CASTLING_KING_SIDE
+                    else "queenside"
+                )
+                raise IllegalStateTransitionError(f"Missing {side} rook")
             child.board.set_piece(rook_to, rook)
 
         child.castling_rights = StateTransition._updated_castling_rights(state, move)

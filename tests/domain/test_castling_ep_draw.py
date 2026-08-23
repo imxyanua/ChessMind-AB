@@ -39,6 +39,39 @@ def _state(pieces: dict[str, Piece], **kwargs) -> GameState:
     return GameState(**defaults)
 
 
+def test_castling_rook_path_helper() -> None:
+    king = Piece(type=PieceType.KING, color=Color.WHITE)
+    from chessmind_ab.domain.move import Move
+
+    kingside = Move(
+        from_position=Position.from_chess_notation("e1"),
+        to_position=Position.from_chess_notation("g1"),
+        moving_piece=king,
+        move_type=MoveType.CASTLING_KING_SIDE,
+    )
+    queenside = Move(
+        from_position=Position.from_chess_notation("e1"),
+        to_position=Position.from_chess_notation("c1"),
+        moving_piece=king,
+        move_type=MoveType.CASTLING_QUEEN_SIDE,
+    )
+    assert StateTransition.castling_rook_path(kingside) == (
+        Position.from_chess_notation("h1"),
+        Position.from_chess_notation("f1"),
+    )
+    assert StateTransition.castling_rook_path(queenside) == (
+        Position.from_chess_notation("a1"),
+        Position.from_chess_notation("d1"),
+    )
+    normal = Move(
+        from_position=Position.from_chess_notation("e2"),
+        to_position=Position.from_chess_notation("e4"),
+        moving_piece=Piece(type=PieceType.PAWN, color=Color.WHITE),
+        move_type=MoveType.NORMAL,
+    )
+    assert StateTransition.castling_rook_path(normal) is None
+
+
 def test_white_kingside_castling_moves_rook() -> None:
     state = _state(
         {

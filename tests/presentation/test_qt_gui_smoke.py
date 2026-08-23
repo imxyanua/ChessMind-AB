@@ -137,6 +137,36 @@ def test_qt_board_animate_move_completes(qapp) -> None:
     board.close()
 
 
+def test_qt_board_animate_castling_slides_king_and_rook(qapp) -> None:
+    board = ChessBoardWidget()
+    done = {"ok": False}
+
+    def _finish() -> None:
+        done["ok"] = True
+
+    king = Piece(type=PieceType.KING, color=Color.WHITE)
+    rook = Piece(type=PieceType.ROOK, color=Color.WHITE)
+    king_from = Position(row=7, column=4)
+    king_to = Position(row=7, column=6)
+    rook_from = Position(row=7, column=7)
+    rook_to = Position(row=7, column=5)
+    board.animate_move(
+        king,
+        king_from,
+        king_to,
+        on_finished=_finish,
+        duration_ms=50,
+        extra_slides=[(rook, rook_from, rook_to)],
+    )
+    assert board.is_animating
+    assert len(board._slides) == 2
+    assert board.hidden == {king_from, king_to, rook_from, rook_to}
+    assert _wait_until(qapp, lambda: done["ok"], timeout_s=2.0)
+    assert not board.is_animating
+    assert board._slides == []
+    board.close()
+
+
 def test_qt_player_move_uses_animation(qapp) -> None:
     window = ChessMainWindow(difficulty_key="beginner")
     e2 = Position.from_chess_notation("e2")
