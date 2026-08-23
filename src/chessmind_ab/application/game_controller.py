@@ -118,9 +118,16 @@ class GameController:
     def to_pgn(
         self,
         *,
-        white: str = "Player",
-        black: str = "ChessMind-AB",
+        white: str | None = None,
+        black: str | None = None,
     ) -> str:
+        if white is None or black is None:
+            if self._player_color is Color.WHITE:
+                white = white or "Player"
+                black = black or "ChessMind-AB"
+            else:
+                white = white or "ChessMind-AB"
+                black = black or "Player"
         return build_pgn(
             [entry.notation for entry in self._history],
             self._state.status,
@@ -135,6 +142,12 @@ class GameController:
 
     def get_difficulty(self) -> Difficulty:
         return self._difficulty
+
+    def get_player_color(self) -> Color:
+        return self._player_color
+
+    def set_player_color(self, color: Color) -> None:
+        self._player_color = color
 
     def set_difficulty(self, difficulty_key: str) -> None:
         self._difficulty = get_difficulty(difficulty_key)
@@ -170,14 +183,10 @@ class GameController:
             HistoryEntry(notation=notation, move=move, by_player=by_player)
         )
         if move.captured_piece is not None:
-            if by_player:
+            if move.moving_piece.color is Color.WHITE:
                 self._captured_by_white.append(move.captured_piece)
             else:
-                # AI is black when player is white.
-                if self._player_color is Color.WHITE:
-                    self._captured_by_black.append(move.captured_piece)
-                else:
-                    self._captured_by_white.append(move.captured_piece)
+                self._captured_by_black.append(move.captured_piece)
 
     def make_player_move(self, move: Move) -> MoveResult:
         if self._state.status is not GameStatus.ONGOING:

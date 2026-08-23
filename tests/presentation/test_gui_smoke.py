@@ -83,6 +83,17 @@ def test_wider_three_column_layout(tk_root) -> None:
     assert app.history_panel.cget("bg") == app.ui_theme.card_bg
 
 
+def test_play_as_side_control_exists_and_flips_board(tk_root) -> None:
+    app = ChessGuiApp(tk_root, difficulty_key="beginner")
+    assert app.side_var.get() == "White"
+    assert app.geometry.flipped is False
+    app.side_var.set("Black")
+    app.root.update_idletasks()
+    assert app.controller.get_player_color() is Color.BLACK
+    assert app.geometry.flipped is True
+    assert app.subtitle_label.cget("text").startswith("Player vs AI")
+
+
 def test_difficulty_description_box_stays_fixed(tk_root) -> None:
     app = ChessGuiApp(tk_root, difficulty_key="beginner")
     desc_parent = app.difficulty_desc.master

@@ -35,6 +35,16 @@ def test_click_outside_board_rejected() -> None:
         geo.pixels_to_position(0, 0)
 
 
+def test_flipped_board_maps_a8_to_bottom_right_visual() -> None:
+    geo = BoardGeometry(square_size=72, margin=28, flipped=True)
+    a8 = Position.from_chess_notation("a8")
+    x0, y0, x1, y1 = geo.position_to_pixels(a8)
+    # Flipped: a8 appears at bottom-right visually.
+    assert x0 > geo.margin + 6 * geo.square_size
+    assert y0 > geo.margin + 6 * geo.square_size
+    assert geo.pixels_to_position((x0 + x1) // 2, (y0 + y1) // 2) == a8
+
+
 def test_piece_glyph_maps_king() -> None:
     assert piece_glyph(Piece(type=PieceType.KING, color=Color.WHITE)) == "♔"
     assert piece_glyph(Piece(type=PieceType.KING, color=Color.BLACK)) == "♚"
