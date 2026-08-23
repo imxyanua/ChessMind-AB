@@ -127,11 +127,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Include AlphaBeta+Ordering+TT in benchmark comparison",
     )
-    parser.add_argument(
-        "--tk",
-        action="store_true",
-        help="Use legacy Tkinter GUI instead of PySide6",
-    )
     args = parser.parse_args(argv)
 
     from chessmind_ab.search.debug_log import configure_from_env, set_debug_search
@@ -141,10 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         set_debug_search(True)
 
     if args.command == "gui":
-        if args.tk:
-            from chessmind_ab.presentation.gui import run_gui
-        else:
-            from chessmind_ab.presentation.qt_gui import run_gui
+        from chessmind_ab.presentation.qt_gui import run_gui
 
         run_gui(depth=args.depth, difficulty=args.difficulty)
         return 0

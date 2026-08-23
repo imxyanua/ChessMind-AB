@@ -21,6 +21,7 @@ class ChessBoardWidget(QWidget):
         self.geometry_helper = BoardGeometry(square_size=72, margin=30, flipped=False)
         self.pieces = QtPieceCache(self.geometry_helper.square_size)
         self.board_theme: BoardTheme = BOARD_THEMES["green"]
+        self.chrome_bg: str | None = None
         self.state: GameState | None = None
         self.selected: Position | None = None
         self.targets: set[Position] = set()
@@ -99,7 +100,7 @@ class ChessBoardWidget(QWidget):
         margin = self.geometry_helper.margin
         board = self.geometry_helper.board_pixels
 
-        painter.fillRect(self.rect(), QColor(theme.canvas_bg))
+        painter.fillRect(self.rect(), QColor(self.chrome_bg or theme.canvas_bg))
         outer = 10
         painter.setPen(QPen(QColor(theme.frame_border), 2))
         painter.setBrush(QColor(theme.frame))

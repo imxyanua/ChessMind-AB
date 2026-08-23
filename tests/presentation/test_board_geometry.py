@@ -3,11 +3,11 @@
 import pytest
 
 from chessmind_ab.domain.position import InvalidPositionError, Position
-from chessmind_ab.presentation.board_geometry import BoardGeometry
-from chessmind_ab.presentation.gui import piece_glyph
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
+from chessmind_ab.presentation.board_geometry import BoardGeometry
+from chessmind_ab.presentation.ui_common import piece_glyph
 
 
 def test_position_pixel_roundtrip_center() -> None:
@@ -52,6 +52,6 @@ def test_piece_glyph_maps_king() -> None:
 
 def test_format_status_prettifies_enum() -> None:
     from chessmind_ab.domain.game_status import GameStatus
-    from chessmind_ab.presentation.gui import format_status
+    from chessmind_ab.presentation.ui_common import format_status
 
     assert format_status(GameStatus.WHITE_WINS_CHECKMATE) == "White Wins Checkmate"
