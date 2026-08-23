@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QGridLayout,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -105,10 +107,14 @@ class ChessMainWindow(QMainWindow):
         self.board.square_clicked.connect(self._on_square_clicked)
         layout.addWidget(self.board, 0, Qt.AlignmentFlag.AlignTop)
 
+        board_h = self.board.height()
+
         # Info card
-        info_card = self._card()
-        info_card.setFixedWidth(320)
-        info_layout = QVBoxLayout(info_card)
+        self.info_card = self._card()
+        self.info_card.setFixedWidth(340)
+        self.info_card.setFixedHeight(board_h)
+        info_layout = QVBoxLayout(self.info_card)
+        info_layout.setContentsMargins(14, 14, 14, 14)
         info_layout.setSpacing(8)
 
         self.title = QLabel("ChessMind-AB")
@@ -175,37 +181,50 @@ class ChessMainWindow(QMainWindow):
         self.ui_theme_box.currentTextChanged.connect(self._on_ui_theme)
 
         self._section(info_layout, "ACTIONS")
-        btn_row = QHBoxLayout()
         self.new_btn = QPushButton("New Game")
         self.undo_btn = QPushButton("Undo")
-        self.new_btn.clicked.connect(self._on_new_game)
-        self.undo_btn.clicked.connect(self._on_undo)
-        btn_row.addWidget(self.new_btn)
-        btn_row.addWidget(self.undo_btn)
-        info_layout.addLayout(btn_row)
-
-        pgn_row = QHBoxLayout()
         self.copy_btn = QPushButton("Copy PGN")
         self.save_btn = QPushButton("Save PGN")
+        self.new_btn.clicked.connect(self._on_new_game)
+        self.undo_btn.clicked.connect(self._on_undo)
         self.copy_btn.clicked.connect(self._on_copy_pgn)
         self.save_btn.clicked.connect(self._on_save_pgn)
-        pgn_row.addWidget(self.copy_btn)
-        pgn_row.addWidget(self.save_btn)
-        info_layout.addLayout(pgn_row)
-        info_layout.addStretch(1)
-        layout.addWidget(info_card, 0, Qt.AlignmentFlag.AlignTop)
 
-        # History card
-        hist_card = self._card()
-        hist_card.setFixedWidth(300)
-        hist_layout = QVBoxLayout(hist_card)
+        actions = QGridLayout()
+        actions.setHorizontalSpacing(8)
+        actions.setVerticalSpacing(8)
+        for btn in (self.new_btn, self.undo_btn, self.copy_btn, self.save_btn):
+            btn.setMinimumHeight(38)
+            btn.setMinimumWidth(140)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        actions.addWidget(self.new_btn, 0, 0)
+        actions.addWidget(self.undo_btn, 0, 1)
+        actions.addWidget(self.copy_btn, 1, 0)
+        actions.addWidget(self.save_btn, 1, 1)
+        actions.setColumnStretch(0, 1)
+        actions.setColumnStretch(1, 1)
+        info_layout.addLayout(actions)
+        info_layout.addStretch(1)
+        layout.addWidget(self.info_card, 0, Qt.AlignmentFlag.AlignTop)
+
+        # History card — same height as info/board so move list can fill.
+        self.hist_card = self._card()
+        self.hist_card.setFixedWidth(300)
+        self.hist_card.setFixedHeight(board_h)
+        hist_layout = QVBoxLayout(self.hist_card)
+        hist_layout.setContentsMargins(14, 14, 14, 14)
+        hist_layout.setSpacing(8)
         hist_title = QLabel("Move list")
         hist_title.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         hist_sub = QLabel("SAN notation")
+        hist_sub.setObjectName("key")
         hist_layout.addWidget(hist_title)
         hist_layout.addWidget(hist_sub)
         self.move_list = QListWidget()
         self.move_list.setFont(QFont("Consolas", 11))
+        self.move_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         hist_layout.addWidget(self.move_list, 1)
         self.hint = QLabel("Click your piece, then a marked square.")
         self.hint.setObjectName("key")
@@ -213,7 +232,7 @@ class ChessMainWindow(QMainWindow):
         self.hint.setFixedHeight(48)
         self.hint.setAlignment(Qt.AlignmentFlag.AlignTop)
         hist_layout.addWidget(self.hint)
-        layout.addWidget(hist_card, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.hist_card, 0, Qt.AlignmentFlag.AlignTop)
 
         self.setFixedSize(self.sizeHint())
 
@@ -288,9 +307,10 @@ class ChessMainWindow(QMainWindow):
                 background: {t.button_bg};
                 color: {t.text};
                 border: 1px solid {t.input_border};
-                padding: 8px 10px;
+                padding: 10px 14px;
                 border-radius: 6px;
                 font-weight: 600;
+                min-width: 132px;
             }}
             QPushButton:hover {{
                 background: {t.button_hover};
