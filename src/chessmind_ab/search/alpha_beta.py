@@ -19,6 +19,8 @@ from chessmind_ab.search.quiescence import quiescence
 from chessmind_ab.search.search_result import SearchResult
 from chessmind_ab.search.search_statistics import SearchStatistics
 from chessmind_ab.search.terminal import terminal_score
+from chessmind_ab.search.transposition_table import TTFlag, TranspositionTable
+from chessmind_ab.search.zobrist import zobrist_hash
 
 
 class AlphaBetaSearch:
@@ -28,17 +30,21 @@ class AlphaBetaSearch:
         move_ordering: MoveOrdering | None = None,
         diversity_window: int = 0,
         rng: random.Random | None = None,
+        transposition_table: TranspositionTable | None = None,
     ) -> None:
         self._evaluation = evaluation or EvaluationFunction()
         self._move_ordering = move_ordering
         self._diversity_window = max(0, diversity_window)
         self._rng = rng
+        self._tt = transposition_table
 
     def find_best_move(
         self,
         state: GameState,
         depth: int,
         diversity_window: int | None = None,
+        *,
+        clear_tt: bool = True,
     ) -> SearchResult:
         if depth < 1:
             raise ValueError("depth must be >= 1")
@@ -46,6 +52,9 @@ class AlphaBetaSearch:
         window = (
             self._diversity_window if diversity_window is None else max(0, diversity_window)
         )
+
+        if clear_tt and self._tt is not None:
+            self._tt.clear()
 
         stats = SearchStatistics()
         started = time.perf_counter()
@@ -145,13 +154,24 @@ class AlphaBetaSearch:
         stats: SearchStatistics,
     ) -> int:
         stats.nodes_visited += 1
+        original_alpha = alpha
+        key = zobrist_hash(state) if self._tt is not None else 0
+
+        if self._tt is not None:
+            cached = self._tt.lookup(key, depth, alpha, beta)
+            if cached is not None:
+                return cached
+
         status = GameStatusEvaluator.evaluate(state)
         if status is not GameStatus.ONGOING:
             stats.terminal_nodes += 1
-            return terminal_score(status, distance_from_root)
+            score = terminal_score(status, distance_from_root)
+            if self._tt is not None:
+                self._tt.store(key, depth, score, TTFlag.EXACT)
+            return score
 
         if depth == 0:
-            return quiescence(
+            score = quiescence(
                 state,
                 alpha,
                 beta,
@@ -160,6 +180,9 @@ class AlphaBetaSearch:
                 stats,
                 self._move_ordering,
             )
+            if self._tt is not None:
+                self._tt.store(key, depth, score, TTFlag.EXACT)
+            return score
 
         moves = LegalMoveGenerator.generate(state)
         if self._move_ordering is not None:
@@ -188,7 +211,15 @@ class AlphaBetaSearch:
                         cutoff=cutoff,
                     )
                     break
-            return int(best)
+            best_i = int(best)
+            if self._tt is not None:
+                flag = TTFlag.EXACT
+                if best_i <= original_alpha:
+                    flag = TTFlag.UPPER
+                elif best_i >= beta:
+                    flag = TTFlag.LOWER
+                self._tt.store(key, depth, best_i, flag)
+            return best_i
 
         best = float("inf")
         for index, move in enumerate(moves):
@@ -211,4 +242,12 @@ class AlphaBetaSearch:
                     cutoff=cutoff,
                 )
                 break
-        return int(best)
+        best_i = int(best)
+        if self._tt is not None:
+            flag = TTFlag.EXACT
+            if best_i <= original_alpha:
+                flag = TTFlag.UPPER
+            elif best_i >= beta:
+                flag = TTFlag.LOWER
+            self._tt.store(key, depth, best_i, flag)
+        return best_i

@@ -29,6 +29,7 @@ from chessmind_ab.search.opening_book import OpeningBook
 from chessmind_ab.search.protocol import SearchAlgorithm
 from chessmind_ab.search.search_result import SearchResult
 from chessmind_ab.search.search_statistics import SearchStatistics
+from chessmind_ab.search.transposition_table import TranspositionTable
 
 _EARLY_PLY_LIMIT = 10
 
@@ -71,6 +72,7 @@ class GameController:
             move_ordering=MoveOrdering(),
             diversity_window=self._difficulty.diversity_window,
             rng=self._rng,
+            transposition_table=TranspositionTable(size_power=18),
         )
         self._opening_book = OpeningBook(max_ply=8)
         self._ai_depth = depth

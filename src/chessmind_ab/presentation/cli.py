@@ -122,6 +122,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable Alpha-Beta debug logging (depth/move/alpha/beta/score/cutoff)",
     )
+    parser.add_argument(
+        "--tt",
+        action="store_true",
+        help="Include AlphaBeta+Ordering+TT in benchmark comparison",
+    )
     args = parser.parse_args(argv)
 
     from chessmind_ab.search.debug_log import configure_from_env, set_debug_search
@@ -153,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         set_debug_search(False)
         # Keep experimental runs practical; depth 1-2 recommended.
         depth = args.depth if args.depth is not None and args.depth >= 1 else 1
-        rows = run_benchmark(depth=depth)
+        rows = run_benchmark(depth=depth, with_tt=args.tt)
         print(format_benchmark_table(rows))
         out = write_benchmark_csv(rows, Path(args.out))
         print(f"\nWrote CSV: {out.resolve()}")
