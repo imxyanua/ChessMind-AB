@@ -13,7 +13,7 @@ def test_five_elo_presets_exist() -> None:
     assert get_difficulty("beginner").elo == 600
     assert get_difficulty("expert").elo == 1400
     assert get_difficulty("beginner").depth <= get_difficulty("hard").depth
-    assert get_difficulty("expert").use_opening_book is False
+    assert get_difficulty("expert").use_opening_book is True
 
 
 def test_controller_applies_difficulty() -> None:

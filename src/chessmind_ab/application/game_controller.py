@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 from dataclasses import dataclass
 
@@ -85,6 +86,8 @@ class GameController:
         self._undo_stack: list[_Snapshot] = []
 
     def start_new_game(self) -> GameState:
+        # Fresh entropy each game so book/diversity choices do not stick.
+        self._rng.seed(int.from_bytes(os.urandom(8), "big"))
         self._state = create_initial_game_state()
         self._last_search_result = None
         self._history.clear()
