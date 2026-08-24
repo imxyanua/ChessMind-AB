@@ -110,6 +110,17 @@ class GameController:
     def get_move_history(self) -> list[HistoryEntry]:
         return list(self._history)
 
+    def state_after_plies(self, plies: int) -> GameState:
+        """Rebuild the position after the first ``plies`` history entries."""
+        if plies < 0:
+            raise ValueError("plies must be >= 0")
+        count = min(plies, len(self._history))
+        state = create_initial_game_state()
+        for entry in self._history[:count]:
+            state = StateTransition.apply(state, entry.move)
+            state.status = GameStatusEvaluator.evaluate(state)
+        return state
+
     def get_captured_pieces(self, by_color: Color) -> list[Piece]:
         if by_color is Color.WHITE:
             return list(self._captured_by_white)

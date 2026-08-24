@@ -6,7 +6,7 @@ import sys
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -164,11 +164,13 @@ class ChessMainWindow(QMainWindow):
         self._match_paused = False
         self._match_step_once = False
         self._thinking_label = "AI"
+        self._review_plies: int | None = None
         self._match_delay_timer = QTimer(self)
         self._match_delay_timer.setSingleShot(True)
         self._match_delay_timer.timeout.connect(self._on_match_delay_elapsed)
 
         self._build()
+        self._install_shortcuts()
         self._apply_theme()
         self._apply_mode_visibility()
         self._refresh()
@@ -201,8 +203,10 @@ class ChessMainWindow(QMainWindow):
         info_layout.setSpacing(8)
 
         self.title = QLabel("ChessMind-AB")
-        self.title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
+        self.title.setObjectName("appTitle")
+        self.title.setFont(QFont("Segoe UI", 17, QFont.Weight.DemiBold))
         self.subtitle = QLabel("Player vs AI  ·  Elo modes")
+        self.subtitle.setObjectName("appSubtitle")
         info_layout.addWidget(self.title)
         info_layout.addWidget(self.subtitle)
 
@@ -218,12 +222,14 @@ class ChessMainWindow(QMainWindow):
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 8, 0)
-        body_layout.setSpacing(6)
+        body_layout.setSpacing(7)
 
         self._section(body_layout, "GAME")
         self.mode_value = QLabel("")
         self.turn_value = QLabel("White")
+        self.turn_value.setObjectName("turnBadge")
         self.status_value = QLabel("Ongoing")
+        self.status_value.setObjectName("statusOk")
         self.last_value = QLabel("—")
         self.ai_value = QLabel("waiting")
         self.stats_value = QLabel("—")
@@ -242,10 +248,19 @@ class ChessMainWindow(QMainWindow):
         self.ai_badge.setVisible(False)
         body_layout.addWidget(self.ai_badge)
 
+        self.captured_panel = QFrame()
+        self.captured_panel.setObjectName("capturedPanel")
+        captured_layout = QVBoxLayout(self.captured_panel)
+        captured_layout.setContentsMargins(10, 8, 10, 8)
+        captured_layout.setSpacing(4)
+        captured_title = QLabel("CAPTURED")
+        captured_title.setObjectName("section")
         self.captured_you = QLabel("You  —")
         self.captured_ai = QLabel("AI   —")
-        body_layout.addWidget(self.captured_you)
-        body_layout.addWidget(self.captured_ai)
+        captured_layout.addWidget(captured_title)
+        captured_layout.addWidget(self.captured_you)
+        captured_layout.addWidget(self.captured_ai)
+        body_layout.addWidget(self.captured_panel)
 
         self._section(body_layout, "SETTINGS")
         self.mode_box = QComboBox()
@@ -347,9 +362,9 @@ class ChessMainWindow(QMainWindow):
         self.undo_btn = QPushButton("Undo")
         self.copy_btn = QPushButton("Copy PGN")
         self.save_btn = QPushButton("Save PGN")
-        self.new_btn.setToolTip("Start a new game with current settings")
-        self.undo_btn.setToolTip("Undo the last full turn (you + AI)")
-        self.copy_btn.setToolTip("Copy the game PGN to the clipboard")
+        self.new_btn.setToolTip("Start a new game (Ctrl+N)")
+        self.undo_btn.setToolTip("Undo the last turn (Ctrl+Z)")
+        self.copy_btn.setToolTip("Copy the game PGN (Ctrl+C)")
         self.save_btn.setToolTip("Save the game PGN to a file")
         self.new_btn.clicked.connect(self._on_new_game)
         self.undo_btn.clicked.connect(self._on_undo)
@@ -387,27 +402,45 @@ class ChessMainWindow(QMainWindow):
         hist_layout = QVBoxLayout(self.hist_card)
         hist_layout.setContentsMargins(14, 14, 14, 14)
         hist_layout.setSpacing(8)
+        hist_header = QHBoxLayout()
+        hist_title_col = QVBoxLayout()
         hist_title = QLabel("Move list")
         hist_title.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
-        hist_sub = QLabel("SAN notation")
+        hist_sub = QLabel("Click a row to review")
         hist_sub.setObjectName("key")
-        hist_layout.addWidget(hist_title)
-        hist_layout.addWidget(hist_sub)
+        hist_title_col.addWidget(hist_title)
+        hist_title_col.addWidget(hist_sub)
+        hist_header.addLayout(hist_title_col, 1)
+        self.live_btn = QPushButton("Live")
+        self.live_btn.setObjectName("liveBtn")
+        self.live_btn.setFixedHeight(30)
+        self.live_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.live_btn.setToolTip("Return to the live position")
+        self.live_btn.clicked.connect(self._on_live_clicked)
+        hist_header.addWidget(self.live_btn, 0, Qt.AlignmentFlag.AlignTop)
+        hist_layout.addLayout(hist_header)
         self.move_list = QListWidget()
         self.move_list.setFont(QFont("Consolas", 11))
         self.move_list.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
+        self.move_list.itemClicked.connect(self._on_move_list_clicked)
         hist_layout.addWidget(self.move_list, 1)
         self.hint = QLabel("Click your piece, then a marked square.")
-        self.hint.setObjectName("key")
+        self.hint.setObjectName("hint")
         self.hint.setWordWrap(True)
-        self.hint.setFixedHeight(48)
+        self.hint.setFixedHeight(52)
         self.hint.setAlignment(Qt.AlignmentFlag.AlignTop)
         hist_layout.addWidget(self.hint)
         layout.addWidget(self.hist_card, 0, Qt.AlignmentFlag.AlignTop)
 
         self.setFixedSize(self.sizeHint())
+
+    def _install_shortcuts(self) -> None:
+        QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._on_undo)
+        QShortcut(QKeySequence("Ctrl+N"), self, activated=self._on_new_game)
+        QShortcut(QKeySequence("Ctrl+C"), self, activated=self._on_copy_pgn)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, activated=self._on_escape)
 
     def _section(self, layout: QVBoxLayout, title: str) -> None:
         label = QLabel(title)
@@ -444,9 +477,22 @@ class ChessMainWindow(QMainWindow):
             QFrame#card {{
                 background: {t.card_bg};
                 border: 1px solid {t.card_border};
-                border-radius: 10px;
+                border-radius: 12px;
+            }}
+            QFrame#capturedPanel {{
+                background: {t.list_bg};
+                border: 1px solid {t.input_border};
+                border-radius: 8px;
             }}
             QLabel {{ background: transparent; color: {t.text}; }}
+            QLabel#appTitle {{
+                color: {t.text};
+                letter-spacing: 0.2px;
+            }}
+            QLabel#appSubtitle {{
+                color: {t.muted};
+                font-size: 12px;
+            }}
             QLabel#key, QLabel#section {{ color: {t.muted}; }}
             QLabel#section {{
                 font-size: 11px;
@@ -454,11 +500,31 @@ class ChessMainWindow(QMainWindow):
                 letter-spacing: 0.6px;
                 margin-top: 6px;
             }}
+            QLabel#hint {{
+                color: {t.muted};
+                background: {t.list_bg};
+                border: 1px solid {t.input_border};
+                border-radius: 8px;
+                padding: 8px;
+            }}
             QLabel#badge {{
                 color: {t.accent};
                 background: {t.accent_soft};
                 padding: 6px 8px;
                 border-radius: 6px;
+                font-weight: 600;
+            }}
+            QLabel#turnBadge {{
+                color: {t.accent};
+                font-weight: 700;
+            }}
+            QLabel#statusOk {{
+                color: #3ecf8e;
+                font-weight: 600;
+            }}
+            QLabel#statusEnd {{
+                color: #ff7b72;
+                font-weight: 700;
             }}
             QScrollArea {{
                 background: transparent;
@@ -472,7 +538,7 @@ class ChessMainWindow(QMainWindow):
                 color: {t.text};
                 border: 1px solid {t.input_border};
                 padding: 6px 8px;
-                border-radius: 6px;
+                border-radius: 8px;
                 selection-background-color: {t.accent};
                 selection-color: #ffffff;
             }}
@@ -499,6 +565,9 @@ class ChessMainWindow(QMainWindow):
             QPushButton:pressed {{
                 background: {t.accent_soft};
             }}
+            QPushButton:focus {{
+                border: 1px solid {t.accent};
+            }}
             QPushButton:disabled {{
                 color: {t.muted};
                 background: {t.list_bg};
@@ -518,13 +587,23 @@ class ChessMainWindow(QMainWindow):
                 background: {t.list_bg};
                 border-color: {t.input_border};
             }}
+            QPushButton#liveBtn {{
+                padding: 4px 10px;
+                font-size: 12px;
+                min-width: 52px;
+            }}
             QListWidget {{
                 background: {t.list_bg};
                 outline: none;
+                border-radius: 8px;
             }}
             QListWidget::item {{
-                padding: 4px 6px;
+                padding: 5px 7px;
                 color: {t.text};
+                border-radius: 4px;
+            }}
+            QListWidget::item:hover {{
+                background: {t.accent_soft};
             }}
             QListWidget::item:selected {{
                 background: {t.accent};
@@ -663,8 +742,8 @@ class ChessMainWindow(QMainWindow):
             extra_slides=extras or None,
         )
 
-    def _checked_square(self) -> Position | None:
-        state = self.controller.get_state()
+    def _checked_square(self, state=None) -> Position | None:
+        state = state or self.controller.get_state()
         if state.status is not GameStatus.ONGOING:
             return None
         if AttackDetector.is_king_in_check(state, state.side_to_move):
@@ -677,21 +756,49 @@ class ChessMainWindow(QMainWindow):
         ordered = sorted(pieces, key=material_sort_key)
         return " ".join(piece_glyph(piece) for piece in ordered)
 
+    def _is_reviewing(self) -> bool:
+        return self._review_plies is not None
+
+    def _exit_review(self) -> None:
+        self._review_plies = None
+
     def _refresh(self, message: str | None = None) -> None:
-        state = self.controller.get_state()
+        live_state = self.controller.get_state()
+        history = self.controller.get_move_history()
+        if self._review_plies is not None and self._review_plies > len(history):
+            self._review_plies = len(history) if history else None
+
+        reviewing = self._is_reviewing()
+        state = (
+            self.controller.state_after_plies(self._review_plies)
+            if reviewing
+            else live_state
+        )
         diff = self.controller.get_difficulty()
         if self._is_ai_vs_ai():
             white = self._difficulty_for_side(Color.WHITE)
             black = self._difficulty_for_side(Color.BLACK)
             self.mode_value.setText(f"AI vs AI · {white.name}/{black.name}")
+            self.subtitle.setText("Spectator mode  ·  dual Elo engines")
         else:
             self.mode_value.setText(diff.label)
+            side = "White" if self.controller.get_player_color() is Color.WHITE else "Black"
+            self.subtitle.setText(f"Player vs AI  ·  playing as {side}")
+
         self.turn_value.setText(
             "White" if state.side_to_move is Color.WHITE else "Black"
         )
         self.status_value.setText(format_status(state.status))
-        history = self.controller.get_move_history()
-        self.last_value.setText(history[-1].notation if history else "—")
+        self.status_value.setObjectName(
+            "statusOk" if state.status is GameStatus.ONGOING else "statusEnd"
+        )
+        self.status_value.style().unpolish(self.status_value)
+        self.status_value.style().polish(self.status_value)
+
+        if reviewing and self._review_plies:
+            self.last_value.setText(history[self._review_plies - 1].notation)
+        else:
+            self.last_value.setText(history[-1].notation if history else "—")
 
         search = self.controller.get_last_search_result()
         ai_entries = [entry for entry in history if not entry.by_player]
@@ -739,30 +846,65 @@ class ChessMainWindow(QMainWindow):
                 )
             )
 
+        selected_row = -1
+        self.move_list.blockSignals(True)
         self.move_list.clear()
-        for index in range(0, len(history), 2):
-            white = history[index].notation
-            black = history[index + 1].notation if index + 1 < len(history) else ""
-            item = QListWidgetItem(f"{index // 2 + 1:>2}. {white:<7} {black}")
+        for index, entry in enumerate(history):
+            if index % 2 == 0:
+                text = f"{index // 2 + 1:>2}. {entry.notation}"
+            else:
+                text = f"     {entry.notation}"
+            item = QListWidgetItem(text)
             if (index // 2) % 2 == 1:
                 item.setBackground(QColor(self.ui_theme.row_alt))
+            end_plies = index + 1
+            item.setData(Qt.ItemDataRole.UserRole, end_plies)
             self.move_list.addItem(item)
-        if history:
+            if reviewing and self._review_plies == end_plies:
+                selected_row = index
+        if reviewing and selected_row >= 0:
+            self.move_list.setCurrentRow(selected_row)
+        elif not reviewing and history:
             self.move_list.scrollToBottom()
+        self.move_list.blockSignals(False)
 
-        self.undo_btn.setEnabled(self.controller.can_undo() and not self._ai_busy)
+        self.live_btn.setEnabled(reviewing and not self._busy())
+        self.undo_btn.setEnabled(
+            self.controller.can_undo() and not self._ai_busy and not reviewing
+        )
         if message is not None:
             self.hint.setText(message)
+        elif reviewing:
+            self.hint.setText(
+                f"Reviewing after ply {self._review_plies}. "
+                "Press Live or select the latest row to return."
+            )
 
-        self.board.sync(
-            state,
-            selected=self.selected,
-            targets=self.targets,
-            captures=self.captures,
-            last_from=self.last_from,
-            last_to=self.last_to,
-            checked=self._checked_square(),
-        )
+        if reviewing:
+            last_from = last_to = None
+            if self._review_plies and self._review_plies <= len(history):
+                last = history[self._review_plies - 1].move
+                last_from = last.from_position
+                last_to = last.to_position
+            self.board.sync(
+                state,
+                selected=None,
+                targets=set(),
+                captures=set(),
+                last_from=last_from,
+                last_to=last_to,
+                checked=self._checked_square(state),
+            )
+        else:
+            self.board.sync(
+                state,
+                selected=self.selected,
+                targets=self.targets,
+                captures=self.captures,
+                last_from=self.last_from,
+                last_to=self.last_to,
+                checked=self._checked_square(state),
+            )
         self._update_match_controls()
 
     def _on_board_theme(self, name: str) -> None:
@@ -836,6 +978,7 @@ class ChessMainWindow(QMainWindow):
         self._match_running = False
         self._match_paused = False
         self._match_step_once = False
+        self._exit_review()
         if self._is_ai_vs_ai():
             self.board.set_flipped(False)
             self._start_fresh("New AI vs AI game. Press Start or Step.", auto_ai=False)
@@ -850,6 +993,7 @@ class ChessMainWindow(QMainWindow):
     def _start_fresh(self, message: str, *, auto_ai: bool = True) -> None:
         self.board.cancel_animation(run_callback=False)
         self._animating = False
+        self._exit_review()
         self.controller.start_new_game()
         self.selected = None
         self.targets.clear()
@@ -944,6 +1088,39 @@ class ChessMainWindow(QMainWindow):
             return self.controller.to_pgn(white=white, black=black)
         return self.controller.to_pgn()
 
+    def _on_escape(self) -> None:
+        if self._busy():
+            return
+        if self._is_reviewing():
+            self._on_live_clicked()
+            return
+        if self.selected is not None:
+            self.selected = None
+            self.targets.clear()
+            self.captures.clear()
+            self._refresh(message="Selection cleared.")
+
+    def _on_live_clicked(self) -> None:
+        self._exit_review()
+        self._refresh(message="Back to live position.")
+
+    def _on_move_list_clicked(self, item: QListWidgetItem) -> None:
+        if self._busy():
+            return
+        plies = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(plies, int) or plies <= 0:
+            return
+        history = self.controller.get_move_history()
+        if plies >= len(history):
+            self._exit_review()
+            self._refresh(message="Live position.")
+            return
+        self._review_plies = plies
+        self.selected = None
+        self.targets.clear()
+        self.captures.clear()
+        self._refresh()
+
     def _on_undo(self) -> None:
         if self._ai_busy:
             return
@@ -954,6 +1131,7 @@ class ChessMainWindow(QMainWindow):
             return
         self.board.cancel_animation(run_callback=False)
         self._animating = False
+        self._exit_review()
         result = self.controller.undo()
         self.selected = None
         self.targets.clear()
@@ -987,7 +1165,7 @@ class ChessMainWindow(QMainWindow):
         self._refresh(message=f"PGN saved: {path}")
 
     def _on_square_clicked(self, clicked: Position) -> None:
-        if self._busy() or self._is_ai_vs_ai():
+        if self._busy() or self._is_ai_vs_ai() or self._is_reviewing():
             return
         state = self.controller.get_state()
         player = self.controller.get_player_color()
@@ -1029,6 +1207,7 @@ class ChessMainWindow(QMainWindow):
                 self._refresh(message="Promotion cancelled.")
                 return
 
+        self._exit_review()
         result = self.controller.make_player_move_from_notation(
             from_sq,
             to_sq,
