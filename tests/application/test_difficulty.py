@@ -12,8 +12,22 @@ def test_five_elo_presets_exist() -> None:
     assert set(DIFFICULTIES) == {"beginner", "easy", "medium", "hard", "expert"}
     assert get_difficulty("beginner").elo == 600
     assert get_difficulty("expert").elo == 1400
-    assert get_difficulty("beginner").depth <= get_difficulty("hard").depth
+
+
+def test_strength_gaps_are_monotonic() -> None:
+    order = ["beginner", "easy", "medium", "hard", "expert"]
+    depths = [get_difficulty(key).depth for key in order]
+    times = [get_difficulty(key).time_budget_ms for key in order]
+    diversities = [get_difficulty(key).diversity_window for key in order]
+    assert depths == sorted(depths)
+    assert depths == sorted(set(depths))  # strictly increasing, no shared depth
+    assert times == sorted(times)
+    assert diversities == sorted(diversities, reverse=True)
+    assert get_difficulty("beginner").use_opening_book is False
+    assert get_difficulty("easy").use_opening_book is True
     assert get_difficulty("expert").use_opening_book is True
+    assert get_difficulty("expert").diversity_window == 0
+    assert get_difficulty("expert").early_diversity_window == 0
 
 
 def test_controller_applies_difficulty() -> None:

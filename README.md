@@ -29,9 +29,9 @@ Choose an Elo difficulty mode:
 python -m chessmind_ab gui --difficulty medium
 ```
 
-Modes: `beginner` (~600), `easy` (~800), `medium` (~1000), `hard` (~1200), `expert` (~1400).
+Modes (strength gaps are intentional): `beginner` (~600, depth 1, no book), `easy` (~800, depth 2), `medium` (~1000, depth 3), `hard` (~1200, depth 4), `expert` (~1400, depth 6, always best root move).
 
-Play mode uses **iterative deepening** with a soft time budget per difficulty (max depth still capped by the preset). Early moves come from an **ECO-style opening book** (Ruy Lopez, Sicilian, French, QGD, King’s Indian, English, London, …) with anti-repeat variety. Benchmarks keep fixed-depth search for fair comparisons.
+Play mode uses **iterative deepening** with a soft time budget per difficulty (max depth still capped by the preset). Weaker tiers keep a wider root **diversity** window so they often play near-best instead of best. Easy+ use an **ECO-style opening book**; Beginner skips the book on purpose. Benchmarks keep fixed-depth search for fair comparisons.
 
 AI search runs in a **background thread** so the window should stay responsive while thinking.
 
