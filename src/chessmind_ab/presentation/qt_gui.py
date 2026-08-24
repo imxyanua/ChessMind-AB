@@ -10,6 +10,8 @@ from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -39,6 +41,7 @@ from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.move_type import MoveType
 from chessmind_ab.domain.piece import Piece
+from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
 from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.presentation.qt_board import ChessBoardWidget
@@ -49,6 +52,57 @@ from chessmind_ab.presentation.themes import (
     UiTheme,
 )
 from chessmind_ab.presentation.ui_common import format_status, piece_glyph
+
+_PROMOTION_CHOICES = (
+    PieceType.QUEEN,
+    PieceType.ROOK,
+    PieceType.BISHOP,
+    PieceType.KNIGHT,
+)
+
+
+class PromotionDialog(QDialog):
+    """Ask the player which piece a promoting pawn should become."""
+
+    def __init__(self, color: Color, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Promote pawn")
+        self.setModal(True)
+        self._choice: PieceType | None = None
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        prompt = QLabel("Choose a piece to promote to:")
+        prompt.setWordWrap(True)
+        layout.addWidget(prompt)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        for piece_type in _PROMOTION_CHOICES:
+            glyph = piece_glyph(Piece(type=piece_type, color=color))
+            button = QPushButton(f"{glyph}\n{piece_type.name.title()}")
+            button.setMinimumSize(88, 72)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            if piece_type is PieceType.QUEEN:
+                button.setDefault(True)
+                button.setObjectName("primary")
+            button.clicked.connect(
+                lambda _checked=False, chosen=piece_type: self._accept(chosen)
+            )
+            row.addWidget(button)
+        layout.addLayout(row)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _accept(self, piece_type: PieceType) -> None:
+        self._choice = piece_type
+        self.accept()
+
+    @property
+    def choice(self) -> PieceType | None:
+        return self._choice
 
 
 class AiWorker(QThread):
@@ -965,9 +1019,20 @@ class ChessMainWindow(QMainWindow):
 
         source = self.selected
         moving = state.board.get_piece(source)
+        from_sq = source.to_chess_notation()
+        to_sq = clicked.to_chess_notation()
+        candidates = self.controller.find_move_candidates(from_sq, to_sq)
+        promotion: PieceType | None = None
+        if any(move.promotion_piece is not None for move in candidates):
+            promotion = self._ask_promotion_piece(player)
+            if promotion is None:
+                self._refresh(message="Promotion cancelled.")
+                return
+
         result = self.controller.make_player_move_from_notation(
-            source.to_chess_notation(),
-            clicked.to_chess_notation(),
+            from_sq,
+            to_sq,
+            promotion=promotion,
         )
         self.selected = None
         self.targets.clear()
@@ -975,26 +1040,34 @@ class ChessMainWindow(QMainWindow):
         if not result.success:
             self._refresh(message=result.message)
             return
-        message = (
-            f"You played {source.to_chess_notation()}{clicked.to_chess_notation()}."
-        )
-        if moving is None:
+        message = f"You played {from_sq}{to_sq}."
+        if promotion is not None:
+            message = f"You played {from_sq}{to_sq}={promotion.name[0]}."
+        history = self.controller.get_move_history()
+        last_move = history[-1].move if history else None
+        extras = self._extra_slides_for_move(last_move) if last_move is not None else []
+        # Prefer the piece now on the destination (promoted piece after promote).
+        animated = self.controller.get_state().board.get_piece(clicked) or moving
+        if animated is None:
             self.last_from = source
             self.last_to = clicked
             self._refresh(message=message)
             self._maybe_ai_or_end()
             return
-        history = self.controller.get_move_history()
-        last_move = history[-1].move if history else None
-        extras = self._extra_slides_for_move(last_move) if last_move is not None else []
         self._animate_then(
-            moving,
+            animated,
             source,
             clicked,
             message=message,
             after=self._maybe_ai_or_end,
             extra_slides=extras,
         )
+
+    def _ask_promotion_piece(self, color: Color) -> PieceType | None:
+        dialog = PromotionDialog(color, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.choice
 
     def _select(self, clicked: Position) -> None:
         self.selected = clicked

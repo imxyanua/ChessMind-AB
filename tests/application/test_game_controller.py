@@ -1,8 +1,13 @@
 """Unit tests for GameController."""
 
 from chessmind_ab.application.game_controller import GameController
+from chessmind_ab.domain.board import Board
 from chessmind_ab.domain.color import Color
+from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
+from chessmind_ab.domain.piece import Piece
+from chessmind_ab.domain.piece_type import PieceType
+from chessmind_ab.domain.position import Position
 
 
 def test_start_new_game_has_initial_setup() -> None:
@@ -95,3 +100,60 @@ def test_make_engine_move_plays_both_sides_for_ai_vs_ai() -> None:
     pgn = controller.to_pgn(white="AI (Beginner)", black="AI (Easy)")
     assert '[White "AI (Beginner)"]' in pgn
     assert '[Black "AI (Easy)"]' in pgn
+
+
+def _promotion_ready_controller() -> GameController:
+    controller = GameController(ai_depth=1)
+    controller.start_new_game()
+    board = Board()
+    board.set_piece(
+        Position.from_chess_notation("e7"),
+        Piece(type=PieceType.PAWN, color=Color.WHITE),
+    )
+    board.set_piece(
+        Position.from_chess_notation("e1"),
+        Piece(type=PieceType.KING, color=Color.WHITE),
+    )
+    board.set_piece(
+        Position.from_chess_notation("a8"),
+        Piece(type=PieceType.KING, color=Color.BLACK),
+    )
+    controller._state = GameState(
+        board=board,
+        side_to_move=Color.WHITE,
+        status=GameStatus.ONGOING,
+        ply_count=20,
+    )
+    return controller
+
+
+def test_player_promotion_defaults_to_queen() -> None:
+    controller = _promotion_ready_controller()
+    candidates = controller.find_move_candidates("e7", "e8")
+    assert len(candidates) == 4
+    assert {move.promotion_piece for move in candidates} == {
+        PieceType.QUEEN,
+        PieceType.ROOK,
+        PieceType.BISHOP,
+        PieceType.KNIGHT,
+    }
+    result = controller.make_player_move_from_notation("e7", "e8")
+    assert result.success is True
+    promoted = controller.get_state().board.get_piece(
+        Position.from_chess_notation("e8")
+    )
+    assert promoted is not None
+    assert promoted.type is PieceType.QUEEN
+
+
+def test_player_promotion_can_choose_rook() -> None:
+    controller = _promotion_ready_controller()
+    result = controller.make_player_move_from_notation(
+        "e7", "e8", promotion=PieceType.ROOK
+    )
+    assert result.success is True
+    promoted = controller.get_state().board.get_piece(
+        Position.from_chess_notation("e8")
+    )
+    assert promoted is not None
+    assert promoted.type is PieceType.ROOK

@@ -16,7 +16,7 @@ from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
 from chessmind_ab.presentation.qt_board import ChessBoardWidget
-from chessmind_ab.presentation.qt_gui import ChessMainWindow
+from chessmind_ab.presentation.qt_gui import ChessMainWindow, PromotionDialog
 
 
 @pytest.fixture(scope="module")
@@ -191,6 +191,15 @@ def test_qt_player_move_uses_animation(qapp) -> None:
             timeout_s=3.0,
         )
     window.close()
+
+
+def test_qt_promotion_dialog_defaults_to_queen_choice(qapp) -> None:
+    dialog = PromotionDialog(Color.WHITE)
+    assert dialog.choice is None
+    # Simulate clicking the default Queen button path.
+    dialog._accept(PieceType.QUEEN)
+    assert dialog.choice is PieceType.QUEEN
+    dialog.close()
 
 
 def test_qt_ai_vs_ai_mode_widgets_and_step(qapp) -> None:

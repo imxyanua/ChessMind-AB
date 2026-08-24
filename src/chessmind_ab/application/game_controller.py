@@ -208,7 +208,25 @@ class GameController:
         self._record_move(before, move, by_player=True)
         return MoveResult(True, "OK", self._state)
 
-    def make_player_move_from_notation(self, from_sq: str, to_sq: str) -> MoveResult:
+    def find_move_candidates(self, from_sq: str, to_sq: str) -> list[Move]:
+        try:
+            source = Position.from_chess_notation(from_sq)
+            target = Position.from_chess_notation(to_sq)
+        except Exception:
+            return []
+        return [
+            move
+            for move in self.get_legal_moves()
+            if move.from_position == source and move.to_position == target
+        ]
+
+    def make_player_move_from_notation(
+        self,
+        from_sq: str,
+        to_sq: str,
+        *,
+        promotion: PieceType | None = None,
+    ) -> MoveResult:
         try:
             source = Position.from_chess_notation(from_sq)
             target = Position.from_chess_notation(to_sq)
@@ -221,19 +239,19 @@ class GameController:
         if piece.color is not self._state.side_to_move:
             return MoveResult(False, "Wrong color", self._state)
 
-        candidates = [
-            move
-            for move in self.get_legal_moves()
-            if move.from_position == source and move.to_position == target
-        ]
+        candidates = self.find_move_candidates(from_sq, to_sq)
         if not candidates:
             return MoveResult(False, "Illegal move", self._state)
-        chosen = candidates[0]
-        for move in candidates:
-            if move.promotion_piece is not None and move.promotion_piece.name == "QUEEN":
-                chosen = move
-                break
-        return self.make_player_move(chosen)
+
+        is_promotion = any(move.promotion_piece is not None for move in candidates)
+        if is_promotion:
+            chosen_type = promotion if promotion is not None else PieceType.QUEEN
+            for move in candidates:
+                if move.promotion_piece is chosen_type:
+                    return self.make_player_move(move)
+            return MoveResult(False, "Illegal promotion choice", self._state)
+
+        return self.make_player_move(candidates[0])
 
     def make_engine_move(
         self,
