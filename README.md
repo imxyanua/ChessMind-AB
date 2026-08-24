@@ -38,12 +38,13 @@ AI search runs in a **background thread** so the window should stay responsive w
 How to play:
 
 1. A window opens with three columns: **board**, **info/controls**, and **SAN move history**.
-2. Pick **Play as** White or Black (board flips when you play Black; AI moves first).
-3. Pick a **Difficulty** (Elo mode) instead of raw search depth.
-4. Click your piece, then a marked destination (dot/ring); pieces **slide** to the target.
-5. Switch **Board/UI themes**, view **captured pieces** in the info column.
-6. **Undo** reverts the last player+AI turn.
-7. **Copy PGN** / **Save PGN** exports the game in Standard Algebraic Notation.
+2. Pick **Mode**: **Player vs AI** or **AI vs AI**.
+3. In Player vs AI: choose **Play as** White or Black (board flips when you play Black; AI moves first) and one **Difficulty**.
+4. In AI vs AI: set **White AI** / **Black AI** Elo (same or different), **Speed**, then **Start** / **Pause** / **Stop** / **Step**.
+5. Click your piece, then a marked destination (dot/ring); pieces **slide** to the target (including castling rook).
+6. Switch **Board/UI themes**, view **captured pieces** in the info column.
+7. **Undo** reverts the last player+AI turn (or one ply in AI vs AI).
+8. **Copy PGN** / **Save PGN** exports the game in Standard Algebraic Notation.
 
 Refresh piece sprites (Wikipedia set via chessboardjs assets):
 
