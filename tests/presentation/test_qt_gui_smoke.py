@@ -238,6 +238,26 @@ def test_qt_captured_pieces_use_large_glyphs(qapp) -> None:
     window.close()
 
 
+def test_qt_captured_is_sibling_under_move_list(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    assert window.move_panel.objectName() == "movePanel"
+    assert window.captured_panel.objectName() == "capturedPanel"
+    assert window.move_panel.parentWidget() is window.hist_card
+    assert window.captured_panel.parentWidget() is window.hist_card
+    assert window.captured_panel.parentWidget() is not window.move_panel
+    hist_layout = window.hist_card.layout()
+    move_idx = cap_idx = None
+    for index in range(hist_layout.count()):
+        widget = hist_layout.itemAt(index).widget()
+        if widget is window.move_panel:
+            move_idx = index
+        if widget is window.captured_panel:
+            cap_idx = index
+    assert move_idx is not None and cap_idx is not None
+    assert move_idx < cap_idx
+    window.close()
+
+
 def test_qt_escape_clears_selection(qapp) -> None:
     window = ChessMainWindow(difficulty_key="beginner")
     window._select(Position.from_chess_notation("e2"))
