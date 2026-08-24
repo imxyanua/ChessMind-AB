@@ -157,3 +157,17 @@ def test_player_promotion_can_choose_rook() -> None:
     )
     assert promoted is not None
     assert promoted.type is PieceType.ROOK
+
+
+def test_state_after_plies_rebuilds_history_position() -> None:
+    controller = GameController(ai_depth=1)
+    controller.start_new_game()
+    controller.make_player_move_from_notation("e2", "e4")
+    controller.make_ai_move()
+    mid = controller.state_after_plies(1)
+    assert mid.ply_count == 1
+    assert mid.board.get_piece(Position.from_chess_notation("e4")) is not None
+    assert mid.board.get_piece(Position.from_chess_notation("e2")) is None
+    live = controller.get_state()
+    assert controller.state_after_plies(2).ply_count == live.ply_count
+    assert controller.state_after_plies(0).ply_count == 0

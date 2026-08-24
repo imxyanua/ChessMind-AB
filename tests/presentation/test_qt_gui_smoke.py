@@ -202,6 +202,37 @@ def test_qt_promotion_dialog_defaults_to_queen_choice(qapp) -> None:
     dialog.close()
 
 
+def test_qt_move_list_review_and_live(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    window.controller.make_player_move_from_notation("e2", "e4")
+    window.controller.make_ai_move()
+    window._refresh()
+    assert window.move_list.count() >= 2
+    assert window.live_btn.isEnabled() is False
+
+    # First ply is an intermediate position (not yet live).
+    first = window.move_list.item(0)
+    window._on_move_list_clicked(first)
+    assert window._is_reviewing()
+    assert window._review_plies == 1
+    assert window.live_btn.isEnabled()
+    assert "Reviewing" in window.hint.text()
+
+    window._on_live_clicked()
+    assert not window._is_reviewing()
+    assert "live" in window.hint.text().lower()
+    window.close()
+
+
+def test_qt_escape_clears_selection(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    window._select(Position.from_chess_notation("e2"))
+    assert window.selected is not None
+    window._on_escape()
+    assert window.selected is None
+    window.close()
+
+
 def test_qt_ai_vs_ai_mode_widgets_and_step(qapp) -> None:
     window = ChessMainWindow(difficulty_key="beginner")
     assert window.mode_box.findData("ai_vs_ai") >= 0
