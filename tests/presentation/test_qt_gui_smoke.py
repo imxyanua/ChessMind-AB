@@ -191,3 +191,42 @@ def test_qt_player_move_uses_animation(qapp) -> None:
             timeout_s=3.0,
         )
     window.close()
+
+
+def test_qt_ai_vs_ai_mode_widgets_and_step(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    assert window.mode_box.findData("ai_vs_ai") >= 0
+    window.mode_box.setCurrentIndex(window.mode_box.findData("ai_vs_ai"))
+    qapp.processEvents()
+    assert window._is_ai_vs_ai()
+    assert not window.match_panel.isHidden()
+    assert window.step_btn.isEnabled()
+    assert window.side_box.isHidden()
+
+    # Board clicks are ignored in spectator mode.
+    before = window.controller.get_state().ply_count
+    window._on_square_clicked(Position.from_chess_notation("e2"))
+    assert window.controller.get_state().ply_count == before
+
+    window.white_diff_box.setCurrentIndex(0)  # beginner
+    window.black_diff_box.setCurrentIndex(0)
+    window.speed_box.setCurrentIndex(0)  # fastest delay
+    window._on_match_step()
+    assert window._ai_busy or window._animating or window.controller.get_state().ply_count >= 1
+    if window._worker is not None:
+        window._worker.wait(15000)
+    assert _wait_until(
+        qapp,
+        lambda: not window._busy() and window.controller.get_state().ply_count >= 1,
+        timeout_s=20.0,
+    )
+    assert window.controller.get_state().ply_count >= 1
+    pgn = window._pgn_text()
+    assert "AI (" in pgn
+
+    window.mode_box.setCurrentIndex(window.mode_box.findData("player"))
+    qapp.processEvents()
+    assert not window._is_ai_vs_ai()
+    assert not window.side_box.isHidden()
+    assert window.match_panel.isHidden()
+    window.close()

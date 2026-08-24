@@ -55,13 +55,29 @@ class AiWorker(QThread):
     finished_ok = Signal(object, object)
     finished_err = Signal(str)
 
-    def __init__(self, controller: GameController) -> None:
+    def __init__(
+        self,
+        controller: GameController,
+        *,
+        difficulty=None,
+        push_undo: bool = False,
+        engine_api: bool = False,
+    ) -> None:
         super().__init__()
         self._controller = controller
+        self._difficulty = difficulty
+        self._push_undo = push_undo
+        self._engine_api = engine_api
 
     def run(self) -> None:
         try:
-            result = self._controller.make_ai_move()
+            if self._engine_api:
+                result = self._controller.make_engine_move(
+                    difficulty=self._difficulty,
+                    push_undo=self._push_undo,
+                )
+            else:
+                result = self._controller.make_ai_move()
             search = self._controller.get_last_search_result()
             self.finished_ok.emit(result, search)
         except Exception as exc:  # noqa: BLE001
@@ -90,9 +106,17 @@ class ChessMainWindow(QMainWindow):
         self._think_dots = 0
         self._think_timer = QTimer(self)
         self._think_timer.timeout.connect(self._on_think_tick)
+        self._match_running = False
+        self._match_paused = False
+        self._match_step_once = False
+        self._thinking_label = "AI"
+        self._match_delay_timer = QTimer(self)
+        self._match_delay_timer.setSingleShot(True)
+        self._match_delay_timer.timeout.connect(self._on_match_delay_elapsed)
 
         self._build()
         self._apply_theme()
+        self._apply_mode_visibility()
         self._refresh()
 
     def _card(self) -> QFrame:
@@ -170,9 +194,16 @@ class ChessMainWindow(QMainWindow):
         body_layout.addWidget(self.captured_ai)
 
         self._section(body_layout, "SETTINGS")
+        self.mode_box = QComboBox()
+        self.mode_box.addItem("Player vs AI", "player")
+        self.mode_box.addItem("AI vs AI", "ai_vs_ai")
+        body_layout.addLayout(self._labeled("Mode", self.mode_box))
+        self.mode_box.currentIndexChanged.connect(self._on_mode_changed)
+
         self.side_box = QComboBox()
         self.side_box.addItems(["White", "Black"])
-        body_layout.addLayout(self._labeled("Play as", self.side_box))
+        self.side_row = self._labeled("Play as", self.side_box)
+        body_layout.addLayout(self.side_row)
         self.side_box.currentTextChanged.connect(self._on_side_changed)
 
         self.diff_box = QComboBox()
@@ -180,7 +211,8 @@ class ChessMainWindow(QMainWindow):
             self.diff_box.addItem(diff.label, diff.key)
         current = get_difficulty(self.controller.get_difficulty().key)
         self.diff_box.setCurrentText(current.label)
-        body_layout.addLayout(self._labeled("Difficulty", self.diff_box))
+        self.diff_row = self._labeled("Difficulty", self.diff_box)
+        body_layout.addLayout(self.diff_row)
         self.diff_box.currentTextChanged.connect(self._on_difficulty_changed)
 
         self.diff_desc = QLabel(current.description)
@@ -189,6 +221,57 @@ class ChessMainWindow(QMainWindow):
         self.diff_desc.setMinimumHeight(36)
         self.diff_desc.setAlignment(Qt.AlignmentFlag.AlignTop)
         body_layout.addWidget(self.diff_desc)
+
+        self.white_diff_box = QComboBox()
+        self.black_diff_box = QComboBox()
+        for diff in DIFFICULTIES.values():
+            self.white_diff_box.addItem(diff.label, diff.key)
+            self.black_diff_box.addItem(diff.label, diff.key)
+        self.white_diff_box.setCurrentText(current.label)
+        self.black_diff_box.setCurrentText(current.label)
+        self.white_diff_row = self._labeled("White AI", self.white_diff_box)
+        self.black_diff_row = self._labeled("Black AI", self.black_diff_box)
+        body_layout.addLayout(self.white_diff_row)
+        body_layout.addLayout(self.black_diff_row)
+
+        self.speed_box = QComboBox()
+        for label, ms in (
+            ("Fast · 0.3s", 300),
+            ("Normal · 0.6s", 600),
+            ("Slow · 1.0s", 1000),
+            ("Very slow · 1.5s", 1500),
+        ):
+            self.speed_box.addItem(label, ms)
+        self.speed_box.setCurrentIndex(1)
+        self.speed_row = self._labeled("Speed", self.speed_box)
+        body_layout.addLayout(self.speed_row)
+
+        self.match_panel = QWidget()
+        match_grid = QGridLayout(self.match_panel)
+        match_grid.setContentsMargins(0, 0, 0, 0)
+        match_grid.setHorizontalSpacing(8)
+        match_grid.setVerticalSpacing(8)
+        self.start_btn = QPushButton("Start")
+        self.pause_btn = QPushButton("Pause")
+        self.stop_btn = QPushButton("Stop")
+        self.step_btn = QPushButton("Step")
+        self.start_btn.setToolTip("Start or resume the AI vs AI match")
+        self.pause_btn.setToolTip("Pause after the current move")
+        self.stop_btn.setToolTip("Stop auto-play (keep the current board)")
+        self.step_btn.setToolTip("Play exactly one engine move")
+        for btn in (self.start_btn, self.pause_btn, self.stop_btn, self.step_btn):
+            btn.setFixedHeight(34)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        match_grid.addWidget(self.start_btn, 0, 0)
+        match_grid.addWidget(self.pause_btn, 0, 1)
+        match_grid.addWidget(self.stop_btn, 1, 0)
+        match_grid.addWidget(self.step_btn, 1, 1)
+        self.start_btn.clicked.connect(self._on_match_start)
+        self.pause_btn.clicked.connect(self._on_match_pause)
+        self.stop_btn.clicked.connect(self._on_match_stop)
+        self.step_btn.clicked.connect(self._on_match_step)
+        body_layout.addWidget(self.match_panel)
 
         self.board_theme_box = QComboBox()
         self.board_theme_box.addItems(list(BOARD_THEMES.keys()))
@@ -400,10 +483,63 @@ class ChessMainWindow(QMainWindow):
     def _busy(self) -> bool:
         return self._ai_busy or self._animating
 
+    def _is_ai_vs_ai(self) -> bool:
+        return self.mode_box.currentData() == "ai_vs_ai"
+
+    def _set_layout_visible(self, layout: QHBoxLayout, visible: bool) -> None:
+        for index in range(layout.count()):
+            item = layout.itemAt(index)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.setVisible(visible)
+
+    def _apply_mode_visibility(self) -> None:
+        ai_match = self._is_ai_vs_ai()
+        self._set_layout_visible(self.side_row, not ai_match)
+        self._set_layout_visible(self.diff_row, not ai_match)
+        self.diff_desc.setVisible(not ai_match)
+        self._set_layout_visible(self.white_diff_row, ai_match)
+        self._set_layout_visible(self.black_diff_row, ai_match)
+        self._set_layout_visible(self.speed_row, ai_match)
+        self.match_panel.setVisible(ai_match)
+        self._update_match_controls()
+
+    def _match_delay_ms(self) -> int:
+        data = self.speed_box.currentData()
+        return int(data) if data is not None else 600
+
+    def _difficulty_for_side(self, color: Color):
+        if not self._is_ai_vs_ai():
+            return self.controller.get_difficulty()
+        box = self.white_diff_box if color is Color.WHITE else self.black_diff_box
+        key = box.currentData() or self.controller.get_difficulty().key
+        return get_difficulty(key)
+
+    def _update_match_controls(self) -> None:
+        ai_match = self._is_ai_vs_ai()
+        idle = not self._busy()
+        ongoing = self.controller.get_state().status is GameStatus.ONGOING
+        self.start_btn.setEnabled(
+            ai_match and idle and ongoing and (not self._match_running or self._match_paused)
+        )
+        self.pause_btn.setEnabled(ai_match and self._match_running and not self._match_paused)
+        self.stop_btn.setEnabled(
+            ai_match and (self._match_running or self._match_paused or self._match_step_once)
+        )
+        self.step_btn.setEnabled(ai_match and idle and ongoing and not self._match_running)
+        self.mode_box.setEnabled(idle and not self._match_running)
+        self.white_diff_box.setEnabled(idle and not self._match_running)
+        self.black_diff_box.setEnabled(idle and not self._match_running)
+        self.speed_box.setEnabled(ai_match)
+
     def _set_controls_enabled(self, enabled: bool) -> None:
         for widget in (
+            self.mode_box,
             self.side_box,
             self.diff_box,
+            self.white_diff_box,
+            self.black_diff_box,
+            self.speed_box,
             self.board_theme_box,
             self.ui_theme_box,
             self.new_btn,
@@ -414,6 +550,10 @@ class ChessMainWindow(QMainWindow):
             widget.setEnabled(enabled)
         if enabled and not self._busy():
             self.undo_btn.setEnabled(self.controller.can_undo())
+            self._update_match_controls()
+        elif not enabled:
+            for btn in (self.start_btn, self.pause_btn, self.stop_btn, self.step_btn):
+                btn.setEnabled(False)
 
     def _extra_slides_for_move(
         self, move: Move
@@ -486,7 +626,12 @@ class ChessMainWindow(QMainWindow):
     def _refresh(self, message: str | None = None) -> None:
         state = self.controller.get_state()
         diff = self.controller.get_difficulty()
-        self.mode_value.setText(diff.label)
+        if self._is_ai_vs_ai():
+            white = self._difficulty_for_side(Color.WHITE)
+            black = self._difficulty_for_side(Color.BLACK)
+            self.mode_value.setText(f"AI vs AI · {white.name}/{black.name}")
+        else:
+            self.mode_value.setText(diff.label)
         self.turn_value.setText(
             "White" if state.side_to_move is Color.WHITE else "Black"
         )
@@ -514,14 +659,31 @@ class ChessMainWindow(QMainWindow):
         else:
             self.stats_value.setText("—")
 
-        player = self.controller.get_player_color()
-        self.captured_you.setText(
-            "You  " + self._format_captured(self.controller.get_captured_pieces(player))
-        )
-        self.captured_ai.setText(
-            "AI   "
-            + self._format_captured(self.controller.get_captured_pieces(player.opposite()))
-        )
+        if self._is_ai_vs_ai():
+            self.captured_you.setText(
+                "White "
+                + self._format_captured(
+                    self.controller.get_captured_pieces(Color.WHITE)
+                )
+            )
+            self.captured_ai.setText(
+                "Black "
+                + self._format_captured(
+                    self.controller.get_captured_pieces(Color.BLACK)
+                )
+            )
+        else:
+            player = self.controller.get_player_color()
+            self.captured_you.setText(
+                "You  "
+                + self._format_captured(self.controller.get_captured_pieces(player))
+            )
+            self.captured_ai.setText(
+                "AI   "
+                + self._format_captured(
+                    self.controller.get_captured_pieces(player.opposite())
+                )
+            )
 
         self.move_list.clear()
         for index in range(0, len(history), 2):
@@ -547,6 +709,7 @@ class ChessMainWindow(QMainWindow):
             last_to=self.last_to,
             checked=self._checked_square(),
         )
+        self._update_match_controls()
 
     def _on_board_theme(self, name: str) -> None:
         self.board.set_theme(name)
@@ -563,15 +726,41 @@ class ChessMainWindow(QMainWindow):
         self._refresh()
 
     def _on_difficulty_changed(self, label: str) -> None:
-        if not label:
+        if not label or self._is_ai_vs_ai():
             return
         diff = difficulty_from_label(label)
         self.controller.set_difficulty(diff.key)
         self.diff_desc.setText(diff.description)
         self._refresh(message=f"Difficulty set to {diff.label}.")
 
+    def _on_mode_changed(self) -> None:
+        if self._busy() or self._match_running:
+            return
+        self._stop_match_timers()
+        self._match_running = False
+        self._match_paused = False
+        self._match_step_once = False
+        if self._is_ai_vs_ai():
+            self.controller.set_player_color(Color.WHITE)
+            self.board.set_flipped(False)
+            self.side_box.blockSignals(True)
+            self.side_box.setCurrentText("White")
+            self.side_box.blockSignals(False)
+            self._apply_mode_visibility()
+            self._start_fresh("AI vs AI ready. Press Start or Step.", auto_ai=False)
+        else:
+            self._apply_mode_visibility()
+            color = self.controller.get_player_color()
+            self.board.set_flipped(color is Color.BLACK)
+            self._start_fresh(
+                "Player vs AI. Your move."
+                if color is Color.WHITE
+                else "Player vs AI. AI moves first.",
+                auto_ai=True,
+            )
+
     def _on_side_changed(self, side: str) -> None:
-        if self._ai_busy:
+        if self._ai_busy or self._is_ai_vs_ai():
             color = self.controller.get_player_color()
             self.side_box.blockSignals(True)
             self.side_box.setCurrentText("White" if color is Color.WHITE else "Black")
@@ -589,6 +778,14 @@ class ChessMainWindow(QMainWindow):
     def _on_new_game(self) -> None:
         if self._ai_busy:
             return
+        self._stop_match_timers()
+        self._match_running = False
+        self._match_paused = False
+        self._match_step_once = False
+        if self._is_ai_vs_ai():
+            self.board.set_flipped(False)
+            self._start_fresh("New AI vs AI game. Press Start or Step.", auto_ai=False)
+            return
         color = self.controller.get_player_color()
         self._start_fresh(
             "New game started. Your move."
@@ -596,7 +793,7 @@ class ChessMainWindow(QMainWindow):
             else "New game started. AI moves first."
         )
 
-    def _start_fresh(self, message: str) -> None:
+    def _start_fresh(self, message: str, *, auto_ai: bool = True) -> None:
         self.board.cancel_animation(run_callback=False)
         self._animating = False
         self.controller.start_new_game()
@@ -606,12 +803,98 @@ class ChessMainWindow(QMainWindow):
         self.last_from = None
         self.last_to = None
         self._refresh(message=message)
-        if self.controller.get_state().side_to_move is not self.controller.get_player_color():
+        if (
+            auto_ai
+            and not self._is_ai_vs_ai()
+            and self.controller.get_state().side_to_move
+            is not self.controller.get_player_color()
+        ):
             self._start_ai()
+
+    def _stop_match_timers(self) -> None:
+        self._match_delay_timer.stop()
+
+    def _on_match_start(self) -> None:
+        if not self._is_ai_vs_ai() or self._busy():
+            return
+        if self.controller.get_state().status is not GameStatus.ONGOING:
+            return
+        self._match_running = True
+        self._match_paused = False
+        self._match_step_once = False
+        self._refresh(message="AI vs AI running...")
+        self._start_engine_turn()
+
+    def _on_match_pause(self) -> None:
+        if not self._is_ai_vs_ai():
+            return
+        self._match_paused = True
+        self._stop_match_timers()
+        self._refresh(message="AI vs AI paused.")
+
+    def _on_match_stop(self) -> None:
+        if not self._is_ai_vs_ai():
+            return
+        self._match_running = False
+        self._match_paused = False
+        self._match_step_once = False
+        self._stop_match_timers()
+        self._refresh(message="AI vs AI stopped.")
+
+    def _on_match_step(self) -> None:
+        if not self._is_ai_vs_ai() or self._busy():
+            return
+        if self.controller.get_state().status is not GameStatus.ONGOING:
+            return
+        self._match_running = False
+        self._match_paused = True
+        self._match_step_once = True
+        self._stop_match_timers()
+        self._refresh(message="Stepping one engine move...")
+        self._start_engine_turn()
+
+    def _on_match_delay_elapsed(self) -> None:
+        if not self._is_ai_vs_ai():
+            return
+        if not self._match_running or self._match_paused or self._busy():
+            return
+        if self.controller.get_state().status is not GameStatus.ONGOING:
+            return
+        self._start_engine_turn()
+
+    def _schedule_next_match_turn(self) -> None:
+        if not self._is_ai_vs_ai():
+            return
+        if self.controller.get_state().status is not GameStatus.ONGOING:
+            self._match_running = False
+            self._match_paused = False
+            self._match_step_once = False
+            self._game_over()
+            return
+        if self._match_step_once:
+            self._match_step_once = False
+            self._match_paused = True
+            self._match_running = False
+            self._refresh(message="Step done. Press Start or Step.")
+            return
+        if self._match_running and not self._match_paused:
+            self._match_delay_timer.start(self._match_delay_ms())
+            self._refresh(message="AI vs AI running...")
+        else:
+            self._update_match_controls()
+
+    def _pgn_text(self) -> str:
+        if self._is_ai_vs_ai():
+            white = f"AI ({self._difficulty_for_side(Color.WHITE).label})"
+            black = f"AI ({self._difficulty_for_side(Color.BLACK).label})"
+            return self.controller.to_pgn(white=white, black=black)
+        return self.controller.to_pgn()
 
     def _on_undo(self) -> None:
         if self._ai_busy:
             return
+        if self._is_ai_vs_ai() and self._match_running and not self._match_paused:
+            self._on_match_pause()
         if not self.controller.can_undo():
             self._refresh(message="Nothing to undo")
             return
@@ -632,7 +915,7 @@ class ChessMainWindow(QMainWindow):
         self._refresh(message=result.message)
 
     def _on_copy_pgn(self) -> None:
-        QApplication.clipboard().setText(self.controller.to_pgn())
+        QApplication.clipboard().setText(self._pgn_text())
         self._refresh(message="PGN copied to clipboard.")
 
     def _on_save_pgn(self) -> None:
@@ -643,14 +926,14 @@ class ChessMainWindow(QMainWindow):
             return
         try:
             with open(path, "w", encoding="utf-8") as handle:
-                handle.write(self.controller.to_pgn())
+                handle.write(self._pgn_text())
         except OSError as exc:
             QMessageBox.critical(self, "Save PGN failed", str(exc))
             return
         self._refresh(message=f"PGN saved: {path}")
 
     def _on_square_clicked(self, clicked: Position) -> None:
-        if self._busy():
+        if self._busy() or self._is_ai_vs_ai():
             return
         state = self.controller.get_state()
         player = self.controller.get_player_color()
@@ -734,18 +1017,47 @@ class ChessMainWindow(QMainWindow):
         if state.status is not GameStatus.ONGOING:
             self._game_over()
             return
+        if self._is_ai_vs_ai():
+            return
         if state.side_to_move is not self.controller.get_player_color():
             self._start_ai()
 
     def _start_ai(self) -> None:
+        self._start_engine_turn(player_vs_ai=True)
+
+    def _start_engine_turn(self, *, player_vs_ai: bool | None = None) -> None:
+        if self._busy():
+            return
+        if self.controller.get_state().status is not GameStatus.ONGOING:
+            return
+        use_pva = (
+            (not self._is_ai_vs_ai())
+            if player_vs_ai is None
+            else player_vs_ai
+        )
+        side = self.controller.get_state().side_to_move
+        difficulty = None if use_pva else self._difficulty_for_side(side)
         self._ai_busy = True
         self._set_controls_enabled(False)
-        self.ai_badge.setText(" ● AI thinking")
+        if use_pva:
+            self._thinking_label = "AI"
+        else:
+            self._thinking_label = (
+                "White AI" if side is Color.WHITE else "Black AI"
+            )
+        badge = f" ● {self._thinking_label} thinking"
+        hint = f"{self._thinking_label} thinking... (UI still responsive)"
+        self.ai_badge.setText(badge)
         self.ai_badge.setVisible(True)
         self._think_dots = 0
         self._think_timer.start(350)
-        self._refresh(message="AI thinking... (UI still responsive)")
-        self._worker = AiWorker(self.controller)
+        self._refresh(message=hint)
+        self._worker = AiWorker(
+            self.controller,
+            difficulty=difficulty,
+            push_undo=not use_pva,
+            engine_api=not use_pva,
+        )
         self._worker.finished_ok.connect(self._on_ai_ok)
         self._worker.finished_err.connect(self._on_ai_err)
         self._worker.start()
@@ -755,7 +1067,9 @@ class ChessMainWindow(QMainWindow):
             return
         self._think_dots = (self._think_dots + 1) % 4
         dots = "." * self._think_dots
-        self.hint.setText(f"AI thinking{dots} (UI still responsive)")
+        self.hint.setText(
+            f"{self._thinking_label} thinking{dots} (UI still responsive)"
+        )
 
     def _stop_think(self) -> None:
         self._think_timer.stop()
@@ -771,19 +1085,29 @@ class ChessMainWindow(QMainWindow):
                 f"{move.from_position.to_chess_notation()}"
                 f"{move.to_position.to_chess_notation()}"
             )
-            message = f"AI played {notation}."
+            if self._is_ai_vs_ai():
+                # Side has already flipped after the move was applied.
+                mover = move.moving_piece.color
+                who = "White AI" if mover is Color.WHITE else "Black AI"
+                message = f"{who} played {notation}."
+            else:
+                message = f"AI played {notation}."
             piece = self.controller.get_state().board.get_piece(move.to_position)
             if piece is None:
                 self.last_from = move.from_position
                 self.last_to = move.to_position
                 self._set_controls_enabled(True)
                 self._refresh(message=message)
-                if self.controller.get_state().status is not GameStatus.ONGOING:
+                if self._is_ai_vs_ai():
+                    self._schedule_next_match_turn()
+                elif self.controller.get_state().status is not GameStatus.ONGOING:
                     self._game_over()
                 return
 
             def _after_ai_anim() -> None:
-                if self.controller.get_state().status is not GameStatus.ONGOING:
+                if self._is_ai_vs_ai():
+                    self._schedule_next_match_turn()
+                elif self.controller.get_state().status is not GameStatus.ONGOING:
                     self._game_over()
 
             self._animate_then(
@@ -799,6 +1123,9 @@ class ChessMainWindow(QMainWindow):
         message = result.message if result is not None else "AI failed"
         self._set_controls_enabled(True)
         self._refresh(message=message)
+        if self._is_ai_vs_ai():
+            self._match_running = False
+            self._match_step_once = False
         if self.controller.get_state().status is not GameStatus.ONGOING:
             self._game_over()
 
@@ -806,12 +1133,19 @@ class ChessMainWindow(QMainWindow):
         self._stop_think()
         self._ai_busy = False
         self._animating = False
+        self._match_running = False
+        self._match_step_once = False
+        self._stop_match_timers()
         self.board.cancel_animation(run_callback=False)
         self._set_controls_enabled(True)
         self._refresh(message=f"AI error: {message}")
         QMessageBox.critical(self, "AI error", message)
 
     def _game_over(self) -> None:
+        self._match_running = False
+        self._match_paused = False
+        self._match_step_once = False
+        self._stop_match_timers()
         pretty = format_status(self.controller.get_state().status)
         self._refresh(message=f"Game over: {pretty}")
         QMessageBox.information(self, "Game over", pretty)

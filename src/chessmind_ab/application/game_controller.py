@@ -235,13 +235,29 @@ class GameController:
                 break
         return self.make_player_move(chosen)
 
-    def make_ai_move(self) -> MoveResult:
+    def make_engine_move(
+        self,
+        *,
+        difficulty: Difficulty | None = None,
+        push_undo: bool = False,
+    ) -> MoveResult:
+        """Play one move for the side to move (spectator / AI vs AI friendly).
+
+        ``difficulty`` overrides the controller preset for this call only.
+        ``push_undo`` stores a snapshot so Undo reverts this single ply
+        (used by AI vs AI). Player vs AI keeps ``push_undo=False`` so one
+        Undo still reverts the whole human+AI turn.
+        """
         if self._state.status is not GameStatus.ONGOING:
             return MoveResult(False, "Game already over", self._state)
-        if self._state.side_to_move is self._player_color:
-            return MoveResult(False, "Not AI turn", self._state)
 
-        if self._difficulty.use_opening_book:
+        diff = difficulty or self._difficulty
+        depth = diff.depth if difficulty is not None else self._ai_depth
+
+        if push_undo:
+            self._push_undo_snapshot()
+
+        if diff.use_opening_book:
             book_move = self._opening_book.suggest(self._state, self._rng)
             if book_move is not None:
                 self._last_search_result = SearchResult(
@@ -256,38 +272,50 @@ class GameController:
                 return MoveResult(True, "AI book move", self._state)
 
         diversity = (
-            self._difficulty.early_diversity_window
+            diff.early_diversity_window
             if self._state.ply_count < _EARLY_PLY_LIMIT
-            else self._difficulty.diversity_window
+            else diff.diversity_window
         )
         if isinstance(self._search, AlphaBetaSearch):
-            budget = self._difficulty.time_budget_ms
-            if budget is not None and budget > 0:
-                result = iterative_deepening_search(
-                    self._search,
-                    self._state,
-                    time_budget_ms=float(budget),
-                    max_depth=self._ai_depth,
-                    diversity_window=diversity,
-                )
-            else:
-                result = self._search.find_best_move(
-                    self._state, self._ai_depth, diversity_window=diversity
-                )
+            # Temporarily align diversity with this side's preset.
+            previous_window = self._search._diversity_window
+            self._search._diversity_window = diversity
+            try:
+                budget = diff.time_budget_ms
+                if budget is not None and budget > 0:
+                    result = iterative_deepening_search(
+                        self._search,
+                        self._state,
+                        time_budget_ms=float(budget),
+                        max_depth=depth,
+                        diversity_window=diversity,
+                    )
+                else:
+                    result = self._search.find_best_move(
+                        self._state, depth, diversity_window=diversity
+                    )
+            finally:
+                self._search._diversity_window = previous_window
         else:
-            result = self._search.find_best_move(self._state, self._ai_depth)
+            result = self._search.find_best_move(self._state, depth)
         self._last_search_result = result
         if result.best_move is None:
             self._state.status = GameStatusEvaluator.evaluate(self._state)
             return MoveResult(False, "No AI move", self._state)
 
-        # Snapshot already taken on player move; AI continues from that branch.
-        # For undo of a full turn (player+AI), one snapshot before player is enough.
         before = self._state
         self._state = StateTransition.apply(self._state, result.best_move)
         self._state.status = GameStatusEvaluator.evaluate(self._state)
         self._record_move(before, result.best_move, by_player=False)
         return MoveResult(True, "AI moved", self._state)
+
+    def make_ai_move(self) -> MoveResult:
+        if self._state.status is not GameStatus.ONGOING:
+            return MoveResult(False, "Game already over", self._state)
+        if self._state.side_to_move is self._player_color:
+            return MoveResult(False, "Not AI turn", self._state)
+        # Snapshot already taken on player move; AI continues from that branch.
+        return self.make_engine_move(push_undo=False)
 
 
 def material_sort_key(piece: Piece) -> int:
