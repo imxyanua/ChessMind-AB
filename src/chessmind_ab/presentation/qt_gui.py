@@ -248,44 +248,6 @@ class ChessMainWindow(QMainWindow):
         self.ai_badge.setVisible(False)
         body_layout.addWidget(self.ai_badge)
 
-        self.captured_panel = QFrame()
-        self.captured_panel.setObjectName("capturedPanel")
-        captured_layout = QVBoxLayout(self.captured_panel)
-        captured_layout.setContentsMargins(10, 10, 10, 10)
-        captured_layout.setSpacing(8)
-        captured_title = QLabel("CAPTURED")
-        captured_title.setObjectName("section")
-        captured_layout.addWidget(captured_title)
-
-        self.captured_you_key = QLabel("You")
-        self.captured_you_key.setObjectName("capturedKey")
-        captured_font = QFont("Segoe UI Symbol", 24, QFont.Weight.DemiBold)
-        self.captured_you = QLabel("—")
-        self.captured_you.setObjectName("capturedPieces")
-        self.captured_you.setFont(captured_font)
-        self.captured_you.setWordWrap(True)
-        self.captured_you.setMinimumHeight(40)
-        self.captured_you.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-
-        self.captured_ai_key = QLabel("AI")
-        self.captured_ai_key.setObjectName("capturedKey")
-        self.captured_ai = QLabel("—")
-        self.captured_ai.setObjectName("capturedPieces")
-        self.captured_ai.setFont(captured_font)
-        self.captured_ai.setWordWrap(True)
-        self.captured_ai.setMinimumHeight(40)
-        self.captured_ai.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-
-        captured_layout.addWidget(self.captured_you_key)
-        captured_layout.addWidget(self.captured_you)
-        captured_layout.addWidget(self.captured_ai_key)
-        captured_layout.addWidget(self.captured_ai)
-        body_layout.addWidget(self.captured_panel)
-
         self._section(body_layout, "SETTINGS")
         self.mode_box = QComboBox()
         self.mode_box.addItem("Player vs AI", "player")
@@ -419,17 +381,24 @@ class ChessMainWindow(QMainWindow):
         info_layout.addWidget(self.actions_panel, 0)
         layout.addWidget(self.info_card, 0, Qt.AlignmentFlag.AlignTop)
 
-        # History card — same height as info/board so move list can fill.
+        # History card: two sibling blocks — Move list, then Captured (not nested).
         self.hist_card = self._card()
-        self.hist_card.setFixedWidth(300)
+        self.hist_card.setFixedWidth(310)
         self.hist_card.setFixedHeight(board_h)
         hist_layout = QVBoxLayout(self.hist_card)
-        hist_layout.setContentsMargins(14, 14, 14, 14)
-        hist_layout.setSpacing(8)
+        hist_layout.setContentsMargins(12, 12, 12, 12)
+        hist_layout.setSpacing(10)
+
+        self.move_panel = QFrame()
+        self.move_panel.setObjectName("movePanel")
+        move_layout = QVBoxLayout(self.move_panel)
+        move_layout.setContentsMargins(10, 10, 10, 10)
+        move_layout.setSpacing(8)
+
         hist_header = QHBoxLayout()
         hist_title_col = QVBoxLayout()
-        hist_title = QLabel("Move list")
-        hist_title.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        hist_title = QLabel("MOVE LIST")
+        hist_title.setObjectName("section")
         hist_sub = QLabel("Click a row to review")
         hist_sub.setObjectName("key")
         hist_title_col.addWidget(hist_title)
@@ -442,12 +411,12 @@ class ChessMainWindow(QMainWindow):
         self.live_btn.setToolTip("Return to the live position")
         self.live_btn.clicked.connect(self._on_live_clicked)
         hist_header.addWidget(self.live_btn, 0, Qt.AlignmentFlag.AlignTop)
-        hist_layout.addLayout(hist_header)
+        move_layout.addLayout(hist_header)
 
         self.move_header = QLabel(f"{'#':>2}   {'White':<9}{'Black':<9}")
         self.move_header.setObjectName("moveHeader")
         self.move_header.setFont(QFont("Consolas", 11, QFont.Weight.DemiBold))
-        hist_layout.addWidget(self.move_header)
+        move_layout.addWidget(self.move_header)
 
         self.move_list = QListWidget()
         self.move_list.setFont(QFont("Consolas", 12))
@@ -455,13 +424,54 @@ class ChessMainWindow(QMainWindow):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self.move_list.itemClicked.connect(self._on_move_list_clicked)
-        hist_layout.addWidget(self.move_list, 1)
+        move_layout.addWidget(self.move_list, 1)
+
         self.hint = QLabel("Click your piece, then a marked square.")
         self.hint.setObjectName("hint")
         self.hint.setWordWrap(True)
-        self.hint.setFixedHeight(52)
+        self.hint.setFixedHeight(48)
         self.hint.setAlignment(Qt.AlignmentFlag.AlignTop)
-        hist_layout.addWidget(self.hint)
+        move_layout.addWidget(self.hint)
+        hist_layout.addWidget(self.move_panel, 1)
+
+        self.captured_panel = QFrame()
+        self.captured_panel.setObjectName("capturedPanel")
+        captured_layout = QVBoxLayout(self.captured_panel)
+        captured_layout.setContentsMargins(10, 10, 10, 10)
+        captured_layout.setSpacing(6)
+        captured_title = QLabel("CAPTURED")
+        captured_title.setObjectName("section")
+        captured_layout.addWidget(captured_title)
+
+        self.captured_you_key = QLabel("YOU")
+        self.captured_you_key.setObjectName("capturedKey")
+        captured_font = QFont("Segoe UI Symbol", 24, QFont.Weight.DemiBold)
+        self.captured_you = QLabel("—")
+        self.captured_you.setObjectName("capturedPieces")
+        self.captured_you.setFont(captured_font)
+        self.captured_you.setWordWrap(True)
+        self.captured_you.setMinimumHeight(40)
+        self.captured_you.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        self.captured_ai_key = QLabel("AI")
+        self.captured_ai_key.setObjectName("capturedKey")
+        self.captured_ai = QLabel("—")
+        self.captured_ai.setObjectName("capturedPieces")
+        self.captured_ai.setFont(captured_font)
+        self.captured_ai.setWordWrap(True)
+        self.captured_ai.setMinimumHeight(40)
+        self.captured_ai.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        captured_layout.addWidget(self.captured_you_key)
+        captured_layout.addWidget(self.captured_you)
+        captured_layout.addWidget(self.captured_ai_key)
+        captured_layout.addWidget(self.captured_ai)
+        hist_layout.addWidget(self.captured_panel, 0)
+
         layout.addWidget(self.hist_card, 0, Qt.AlignmentFlag.AlignTop)
 
         self.setFixedSize(self.sizeHint())
@@ -509,7 +519,7 @@ class ChessMainWindow(QMainWindow):
                 border: 1px solid {t.card_border};
                 border-radius: 12px;
             }}
-            QFrame#capturedPanel {{
+            QFrame#movePanel, QFrame#capturedPanel {{
                 background: {t.list_bg};
                 border: 1px solid {t.input_border};
                 border-radius: 8px;
