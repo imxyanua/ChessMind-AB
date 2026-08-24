@@ -41,7 +41,7 @@ How to play:
 2. Pick **Mode**: **Player vs AI** or **AI vs AI**.
 3. In Player vs AI: choose **Play as** White or Black (board flips when you play Black; AI moves first) and one **Difficulty**.
 4. In AI vs AI: set **White AI** / **Black AI** Elo (same or different), **Speed**, then **Start** / **Pause** / **Stop** / **Step**.
-5. Click your piece, then a marked destination (dot/ring); pieces **slide** to the target (including castling rook).
+5. Click your piece, then a marked destination (dot/ring); pieces **slide** to the target (including castling rook). Pawn promotion asks for **Queen / Rook / Bishop / Knight**.
 6. Switch **Board/UI themes**, view **captured pieces** in the info column.
 7. **Undo** reverts the last player+AI turn (or one ply in AI vs AI).
 8. **Copy PGN** / **Save PGN** exports the game in Standard Algebraic Notation.
