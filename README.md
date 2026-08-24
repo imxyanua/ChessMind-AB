@@ -44,7 +44,7 @@ How to play:
 5. Click your piece, then a marked destination (dot/ring); pieces **slide** to the target (including castling rook). Pawn promotion asks for **Queen / Rook / Bishop / Knight**.
 6. Switch **Board/UI themes**, view **captured pieces** in the info column.
 7. **Undo** reverts the last player+AI turn (or one ply in AI vs AI). Shortcuts: `Ctrl+Z` undo, `Ctrl+N` new, `Ctrl+C` copy PGN, `Esc` clear/review exit.
-8. Click a row in the **move list** to review that position; **Live** returns to the current board.
+8. The **move list** shows `# / White / Black` columns; click a row to review that position, **Live** returns to the current board. **Captured** pieces are shown as large glyphs.
 9. **Copy PGN** / **Save PGN** exports the game in Standard Algebraic Notation.
 
 Refresh piece sprites (Wikipedia set via chessboardjs assets):

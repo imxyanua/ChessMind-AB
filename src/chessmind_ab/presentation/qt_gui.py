@@ -251,14 +251,38 @@ class ChessMainWindow(QMainWindow):
         self.captured_panel = QFrame()
         self.captured_panel.setObjectName("capturedPanel")
         captured_layout = QVBoxLayout(self.captured_panel)
-        captured_layout.setContentsMargins(10, 8, 10, 8)
-        captured_layout.setSpacing(4)
+        captured_layout.setContentsMargins(10, 10, 10, 10)
+        captured_layout.setSpacing(8)
         captured_title = QLabel("CAPTURED")
         captured_title.setObjectName("section")
-        self.captured_you = QLabel("You  —")
-        self.captured_ai = QLabel("AI   —")
         captured_layout.addWidget(captured_title)
+
+        self.captured_you_key = QLabel("You")
+        self.captured_you_key.setObjectName("capturedKey")
+        captured_font = QFont("Segoe UI Symbol", 24, QFont.Weight.DemiBold)
+        self.captured_you = QLabel("—")
+        self.captured_you.setObjectName("capturedPieces")
+        self.captured_you.setFont(captured_font)
+        self.captured_you.setWordWrap(True)
+        self.captured_you.setMinimumHeight(40)
+        self.captured_you.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        self.captured_ai_key = QLabel("AI")
+        self.captured_ai_key.setObjectName("capturedKey")
+        self.captured_ai = QLabel("—")
+        self.captured_ai.setObjectName("capturedPieces")
+        self.captured_ai.setFont(captured_font)
+        self.captured_ai.setWordWrap(True)
+        self.captured_ai.setMinimumHeight(40)
+        self.captured_ai.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        captured_layout.addWidget(self.captured_you_key)
         captured_layout.addWidget(self.captured_you)
+        captured_layout.addWidget(self.captured_ai_key)
         captured_layout.addWidget(self.captured_ai)
         body_layout.addWidget(self.captured_panel)
 
@@ -419,8 +443,14 @@ class ChessMainWindow(QMainWindow):
         self.live_btn.clicked.connect(self._on_live_clicked)
         hist_header.addWidget(self.live_btn, 0, Qt.AlignmentFlag.AlignTop)
         hist_layout.addLayout(hist_header)
+
+        self.move_header = QLabel(f"{'#':>2}   {'White':<9}{'Black':<9}")
+        self.move_header.setObjectName("moveHeader")
+        self.move_header.setFont(QFont("Consolas", 11, QFont.Weight.DemiBold))
+        hist_layout.addWidget(self.move_header)
+
         self.move_list = QListWidget()
-        self.move_list.setFont(QFont("Consolas", 11))
+        self.move_list.setFont(QFont("Consolas", 12))
         self.move_list.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
@@ -499,6 +529,28 @@ class ChessMainWindow(QMainWindow):
                 font-weight: 700;
                 letter-spacing: 0.6px;
                 margin-top: 6px;
+            }}
+            QLabel#capturedKey {{
+                color: {t.muted};
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.4px;
+            }}
+            QLabel#capturedPieces {{
+                color: {t.text};
+                font-family: 'Segoe UI Symbol', 'Segoe UI';
+                font-size: 28px;
+                font-weight: 600;
+                letter-spacing: 6px;
+                min-height: 40px;
+                padding: 4px 0 6px 0;
+            }}
+            QLabel#moveHeader {{
+                color: {t.muted};
+                background: {t.list_bg};
+                border: 1px solid {t.input_border};
+                border-radius: 6px;
+                padding: 4px 8px;
             }}
             QLabel#hint {{
                 color: {t.muted};
@@ -754,7 +806,8 @@ class ChessMainWindow(QMainWindow):
         if not pieces:
             return "—"
         ordered = sorted(pieces, key=material_sort_key)
-        return " ".join(piece_glyph(piece) for piece in ordered)
+        # Thin spaces keep glyphs readable at large size without crowding.
+        return "\u2009".join(piece_glyph(piece) for piece in ordered)
 
     def _is_reviewing(self) -> bool:
         return self._review_plies is not None
@@ -821,27 +874,27 @@ class ChessMainWindow(QMainWindow):
             self.stats_value.setText("—")
 
         if self._is_ai_vs_ai():
+            self.captured_you_key.setText("WHITE")
+            self.captured_ai_key.setText("BLACK")
             self.captured_you.setText(
-                "White "
-                + self._format_captured(
+                self._format_captured(
                     self.controller.get_captured_pieces(Color.WHITE)
                 )
             )
             self.captured_ai.setText(
-                "Black "
-                + self._format_captured(
+                self._format_captured(
                     self.controller.get_captured_pieces(Color.BLACK)
                 )
             )
         else:
             player = self.controller.get_player_color()
+            self.captured_you_key.setText("YOU")
+            self.captured_ai_key.setText("AI")
             self.captured_you.setText(
-                "You  "
-                + self._format_captured(self.controller.get_captured_pieces(player))
+                self._format_captured(self.controller.get_captured_pieces(player))
             )
             self.captured_ai.setText(
-                "AI   "
-                + self._format_captured(
+                self._format_captured(
                     self.controller.get_captured_pieces(player.opposite())
                 )
             )
@@ -849,19 +902,18 @@ class ChessMainWindow(QMainWindow):
         selected_row = -1
         self.move_list.blockSignals(True)
         self.move_list.clear()
-        for index, entry in enumerate(history):
-            if index % 2 == 0:
-                text = f"{index // 2 + 1:>2}. {entry.notation}"
-            else:
-                text = f"     {entry.notation}"
+        for index in range(0, len(history), 2):
+            white = history[index].notation
+            black = history[index + 1].notation if index + 1 < len(history) else ""
+            text = f"{index // 2 + 1:>2}. {white:<9}{black:<9}"
             item = QListWidgetItem(text)
             if (index // 2) % 2 == 1:
                 item.setBackground(QColor(self.ui_theme.row_alt))
-            end_plies = index + 1
+            end_plies = index + 2 if index + 1 < len(history) else index + 1
             item.setData(Qt.ItemDataRole.UserRole, end_plies)
             self.move_list.addItem(item)
             if reviewing and self._review_plies == end_plies:
-                selected_row = index
+                selected_row = index // 2
         if reviewing and selected_row >= 0:
             self.move_list.setCurrentRow(selected_row)
         elif not reviewing and history:

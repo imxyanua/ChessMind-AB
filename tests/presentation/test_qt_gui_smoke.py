@@ -206,21 +206,35 @@ def test_qt_move_list_review_and_live(qapp) -> None:
     window = ChessMainWindow(difficulty_key="beginner")
     window.controller.make_player_move_from_notation("e2", "e4")
     window.controller.make_ai_move()
+    window.controller.make_player_move_from_notation("d2", "d4")
     window._refresh()
+    assert window.move_header.text().replace(" ", "").find("White") >= 0
+    assert "Black" in window.move_header.text()
     assert window.move_list.count() >= 2
     assert window.live_btn.isEnabled() is False
 
-    # First ply is an intermediate position (not yet live).
+    # First full move (White+Black) is intermediate while ply 3 exists.
     first = window.move_list.item(0)
     window._on_move_list_clicked(first)
     assert window._is_reviewing()
-    assert window._review_plies == 1
+    assert window._review_plies == 2
     assert window.live_btn.isEnabled()
     assert "Reviewing" in window.hint.text()
 
     window._on_live_clicked()
     assert not window._is_reviewing()
     assert "live" in window.hint.text().lower()
+    window.close()
+
+
+def test_qt_captured_pieces_use_large_glyphs(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    assert window.captured_you.objectName() == "capturedPieces"
+    assert window.captured_ai.objectName() == "capturedPieces"
+    assert window.captured_you.minimumHeight() >= 40
+    pixel = window.captured_you.font().pixelSize()
+    point = window.captured_you.font().pointSize()
+    assert max(pixel, point) >= 20 or window.captured_you.minimumHeight() >= 40
     window.close()
 
 
