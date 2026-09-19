@@ -54,6 +54,15 @@ def test_run_benchmark_emits_three_algorithms() -> None:
     assert len({row.score for row in rows}) == 1
 
 
+def test_no_quiescence_minimax_has_zero_cutoffs() -> None:
+    rows = run_benchmark(
+        depth=1, positions={"T": _tiny()}, use_quiescence=False, runs=1
+    )
+    by_name = {row.algorithm: row for row in rows}
+    assert by_name["Minimax"].cutoffs == 0
+    assert len({row.score for row in rows}) == 1
+
+
 def test_write_benchmark_csv(tmp_path: Path) -> None:
     rows = run_benchmark(depth=1, positions={"T": _tiny()})
     path = write_benchmark_csv(rows, tmp_path / "out.csv")

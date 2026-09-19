@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -99,12 +100,15 @@ def benchmark_positions() -> dict[str, GameState]:
     }
 
 
-def _algorithms(*, with_tt: bool = False):
+def _algorithms(*, with_tt: bool = False, use_quiescence: bool = True):
     # Deterministic: no diversity RNG for fair comparison.
     algorithms = [
-        ("Minimax", MinimaxSearch()),
-        ("AlphaBeta", AlphaBetaSearch()),
-        ("AlphaBeta+Ordering", AlphaBetaSearch(move_ordering=MoveOrdering())),
+        ("Minimax", MinimaxSearch(use_quiescence=use_quiescence)),
+        ("AlphaBeta", AlphaBetaSearch(use_quiescence=use_quiescence)),
+        (
+            "AlphaBeta+Ordering",
+            AlphaBetaSearch(move_ordering=MoveOrdering(), use_quiescence=use_quiescence),
+        ),
     ]
     if with_tt:
         algorithms.append(
@@ -113,6 +117,7 @@ def _algorithms(*, with_tt: bool = False):
                 AlphaBetaSearch(
                     move_ordering=MoveOrdering(),
                     transposition_table=TranspositionTable(size_power=16),
+                    use_quiescence=use_quiescence,
                 ),
             )
         )
@@ -124,12 +129,23 @@ def run_benchmark(
     positions: dict[str, GameState] | None = None,
     *,
     with_tt: bool = False,
+    use_quiescence: bool = True,
+    runs: int = 1,
 ) -> list[BenchmarkRow]:
+    if runs < 1:
+        raise ValueError("runs must be >= 1")
     suite = positions or benchmark_positions()
     rows: list[BenchmarkRow] = []
     for pos_name, state in suite.items():
-        for algo_name, algorithm in _algorithms(with_tt=with_tt):
-            result = algorithm.find_best_move(state, depth)
+        for algo_name, algorithm in _algorithms(
+            with_tt=with_tt, use_quiescence=use_quiescence
+        ):
+            times: list[float] = []
+            result = None
+            for _ in range(runs):
+                result = algorithm.find_best_move(state, depth)
+                times.append(result.statistics.execution_time_ms)
+            assert result is not None
             best = "none"
             if result.best_move is not None:
                 best = (
@@ -145,7 +161,7 @@ def run_benchmark(
                     cutoffs=result.statistics.cutoffs,
                     score=result.best_score,
                     best_move=best,
-                    time_ms=result.statistics.execution_time_ms,
+                    time_ms=float(statistics.median(times)),
                 )
             )
     return rows

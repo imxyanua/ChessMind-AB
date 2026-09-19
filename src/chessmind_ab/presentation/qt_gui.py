@@ -35,7 +35,6 @@ from chessmind_ab.application.difficulty import (
     get_difficulty,
 )
 from chessmind_ab.application.game_controller import GameController, material_sort_key
-from chessmind_ab.domain.attack_detector import AttackDetector
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.move import Move
@@ -743,6 +742,8 @@ class ChessMainWindow(QMainWindow):
             self.save_btn,
         ):
             widget.setEnabled(enabled)
+        # New Game must stay available while the engine is thinking.
+        self.new_btn.setEnabled(True)
         if enabled and not self._busy():
             self.undo_btn.setEnabled(self.controller.can_undo())
             self._update_match_controls()
@@ -805,12 +806,7 @@ class ChessMainWindow(QMainWindow):
         )
 
     def _checked_square(self, state=None) -> Position | None:
-        state = state or self.controller.get_state()
-        if state.status is not GameStatus.ONGOING:
-            return None
-        if AttackDetector.is_king_in_check(state, state.side_to_move):
-            return state.board.find_king(state.side_to_move)
-        return None
+        return self.controller.checked_king_position(state)
 
     def _format_captured(self, pieces: list[Piece]) -> str:
         if not pieces:
@@ -1033,9 +1029,22 @@ class ChessMainWindow(QMainWindow):
             else "Playing as Black. AI moves first."
         )
 
+    def _abort_worker(self) -> None:
+        worker = self._worker
+        if worker is not None and worker.isRunning():
+            try:
+                worker.finished_ok.disconnect()
+                worker.finished_err.disconnect()
+            except RuntimeError:
+                pass
+            self.controller.cancel_search()
+            worker.wait(8000)
+        self._stop_think()
+        self._ai_busy = False
+        self._worker = None
+
     def _on_new_game(self) -> None:
-        if self._ai_busy:
-            return
+        self._abort_worker()
         self._stop_match_timers()
         self._match_running = False
         self._match_paused = False
@@ -1062,6 +1071,7 @@ class ChessMainWindow(QMainWindow):
         self.captures.clear()
         self.last_from = None
         self.last_to = None
+        self._set_controls_enabled(True)
         self._refresh(message=message)
         if (
             auto_ai
@@ -1095,10 +1105,12 @@ class ChessMainWindow(QMainWindow):
     def _on_match_stop(self) -> None:
         if not self._is_ai_vs_ai():
             return
+        self._abort_worker()
         self._match_running = False
         self._match_paused = False
         self._match_step_once = False
         self._stop_match_timers()
+        self._set_controls_enabled(True)
         self._refresh(message="AI vs AI stopped.")
 
     def _on_match_step(self) -> None:

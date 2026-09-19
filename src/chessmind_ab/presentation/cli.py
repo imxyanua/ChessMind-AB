@@ -127,6 +127,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Include AlphaBeta+Ordering+TT in benchmark comparison",
     )
+    parser.add_argument(
+        "--no-quiescence",
+        action="store_true",
+        help="Disable quiescence in benchmark/report (pure Minimax vs Alpha-Beta)",
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="Repeat each benchmark search and take median time (default: 1)",
+    )
     args = parser.parse_args(argv)
 
     from chessmind_ab.search.debug_log import configure_from_env, set_debug_search
@@ -158,7 +169,13 @@ def main(argv: list[str] | None = None) -> int:
         set_debug_search(False)
         # Keep experimental runs practical; depth 1-2 recommended.
         depth = args.depth if args.depth is not None and args.depth >= 1 else 1
-        rows = run_benchmark(depth=depth, with_tt=args.tt)
+        runs = args.runs if args.runs >= 1 else 1
+        rows = run_benchmark(
+            depth=depth,
+            with_tt=args.tt,
+            use_quiescence=not args.no_quiescence,
+            runs=runs,
+        )
         print(format_benchmark_table(rows))
         out = write_benchmark_csv(rows, Path(args.out))
         print(f"\nWrote CSV: {out.resolve()}")
@@ -173,7 +190,13 @@ def main(argv: list[str] | None = None) -> int:
         depths = [int(part.strip()) for part in args.depths.split(",") if part.strip()]
         if args.depth is not None:
             depths = [args.depth]
-        csv_path, md_path, report = write_report(Path(args.report_dir), depths=depths)
+        runs = args.runs if args.runs >= 1 else 1
+        csv_path, md_path, report = write_report(
+            Path(args.report_dir),
+            depths=depths,
+            use_quiescence=not args.no_quiescence,
+            runs=runs,
+        )
         print(f"Wrote CSV: {csv_path.resolve()}")
         print(f"Wrote Markdown: {md_path.resolve()}")
         for hyp in report.hypotheses:

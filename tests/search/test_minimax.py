@@ -4,6 +4,7 @@ from chessmind_ab.domain.board import Board
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
+from chessmind_ab.domain.initial_position import create_initial_game_state
 from chessmind_ab.domain.piece import Piece
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
@@ -60,3 +61,10 @@ def test_minimax_finds_back_rank_mate_in_one() -> None:
     assert result.best_move.from_position.to_chess_notation() == "h4"
     assert result.best_move.to_position.to_chess_notation() == "h8"
     assert result.best_score > 50_000
+
+
+def test_cancel_stops_search_without_crash() -> None:
+    search = MinimaxSearch(use_quiescence=False)
+    search.cancel()
+    result = search.find_best_move(create_initial_game_state(), depth=1)
+    assert result.best_move is not None

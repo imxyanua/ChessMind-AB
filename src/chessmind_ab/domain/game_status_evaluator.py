@@ -7,6 +7,7 @@ from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
+from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.piece_type import PieceType
 from chessmind_ab.domain.position import Position
 from chessmind_ab.domain.repetition import repetition_key
@@ -15,23 +16,29 @@ from chessmind_ab.domain.repetition import repetition_key
 class GameStatusEvaluator:
     @staticmethod
     def evaluate(state: GameState) -> GameStatus:
+        status, _moves = GameStatusEvaluator.evaluate_with_moves(state)
+        return status
+
+    @staticmethod
+    def evaluate_with_moves(state: GameState) -> tuple[GameStatus, list[Move]]:
+        """Return status and, when ongoing, the legal moves already generated."""
         if state.halfmove_clock >= 100:
-            return GameStatus.DRAW
+            return GameStatus.DRAW, []
         if GameStatusEvaluator._is_threefold(state):
-            return GameStatus.DRAW
+            return GameStatus.DRAW, []
         if GameStatusEvaluator._insufficient_material(state):
-            return GameStatus.DRAW
+            return GameStatus.DRAW, []
 
         legal_moves = LegalMoveGenerator.generate(state)
         if legal_moves:
-            return GameStatus.ONGOING
+            return GameStatus.ONGOING, legal_moves
 
         in_check = AttackDetector.is_king_in_check(state, state.side_to_move)
         if in_check:
             if state.side_to_move is Color.WHITE:
-                return GameStatus.BLACK_WINS_CHECKMATE
-            return GameStatus.WHITE_WINS_CHECKMATE
-        return GameStatus.STALEMATE
+                return GameStatus.BLACK_WINS_CHECKMATE, []
+            return GameStatus.WHITE_WINS_CHECKMATE, []
+        return GameStatus.STALEMATE, []
 
     @staticmethod
     def _is_threefold(state: GameState) -> bool:

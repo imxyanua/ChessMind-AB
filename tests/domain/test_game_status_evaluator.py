@@ -34,6 +34,24 @@ def test_ongoing_when_legal_moves_exist() -> None:
     assert GameStatusEvaluator.evaluate(state) is GameStatus.ONGOING
 
 
+def test_evaluate_with_moves_reuses_legal_list() -> None:
+    from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
+
+    state = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "a2": Piece(type=PieceType.PAWN, color=Color.WHITE),
+        },
+        Color.WHITE,
+    )
+    status, moves = GameStatusEvaluator.evaluate_with_moves(state)
+    assert status is GameStatus.ONGOING
+    generated = LegalMoveGenerator.generate(state)
+    assert set(moves) == set(generated)
+    assert len(moves) == len(generated)
+
+
 def test_back_rank_mate_white_to_move() -> None:
     # Classic back-rank style: white king trapped on back rank by black rook.
     state = _state(

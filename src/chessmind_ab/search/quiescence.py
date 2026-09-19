@@ -35,13 +35,13 @@ def _order_moves(
 
 
 def tactical_moves(
-    state: GameState, move_ordering: MoveOrdering | None = None
+    state: GameState,
+    move_ordering: MoveOrdering | None = None,
+    *,
+    legal: list[Move] | None = None,
 ) -> list[Move]:
-    moves = [
-        move
-        for move in LegalMoveGenerator.generate(state)
-        if move.move_type in _TACTICAL_TYPES
-    ]
+    source = legal if legal is not None else LegalMoveGenerator.generate(state)
+    moves = [move for move in source if move.move_type in _TACTICAL_TYPES]
     return _order_moves(state, moves, move_ordering)
 
 
@@ -90,6 +90,8 @@ def quiescence(
     evaluation: EvaluationFunction,
     stats: SearchStatistics,
     move_ordering: MoveOrdering | None = None,
+    *,
+    legal_moves: list[Move] | None = None,
 ) -> int:
     """Fail-soft quiescence under WHITE=MAX / BLACK=MIN.
 
@@ -98,7 +100,10 @@ def quiescence(
     """
     stats.nodes_visited += 1
 
-    status = GameStatusEvaluator.evaluate(state)
+    if legal_moves is None:
+        status, moves = GameStatusEvaluator.evaluate_with_moves(state)
+    else:
+        status, moves = GameStatus.ONGOING, legal_moves
     if status is not GameStatus.ONGOING:
         stats.terminal_nodes += 1
         return terminal_score(status, distance_from_root)
@@ -106,15 +111,13 @@ def quiescence(
     is_white = state.side_to_move is Color.WHITE
     in_check = AttackDetector.is_king_in_check(state, state.side_to_move)
     if in_check:
-        moves = _order_moves(
-            state, LegalMoveGenerator.generate(state), move_ordering
-        )
-        stats.generated_moves += len(moves)
-        if not moves:
-            return terminal_score(GameStatusEvaluator.evaluate(state), distance_from_root)
+        ordered = _order_moves(state, moves, move_ordering)
+        stats.generated_moves += len(ordered)
+        if not ordered:
+            return terminal_score(status, distance_from_root)
         return _play_moves(
             state,
-            moves,
+            ordered,
             alpha,
             beta,
             distance_from_root,
@@ -139,11 +142,11 @@ def quiescence(
         best = stand_pat
         beta = min(beta, stand_pat)
 
-    moves = tactical_moves(state, move_ordering)
-    stats.generated_moves += len(moves)
+    tactical = tactical_moves(state, move_ordering, legal=moves)
+    stats.generated_moves += len(tactical)
     return _play_moves(
         state,
-        moves,
+        tactical,
         alpha,
         beta,
         distance_from_root,

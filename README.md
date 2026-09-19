@@ -73,18 +73,21 @@ Compare Minimax / AlphaBeta / AlphaBeta+Ordering (deterministic):
 ```bash
 python -m chessmind_ab benchmark --depth 2 --out benchmark_results.csv
 python -m chessmind_ab benchmark --depth 2 --tt --out benchmark_results.csv
+python -m chessmind_ab benchmark --depth 3 --no-quiescence --runs 3 --out benchmark_results.csv
 ```
 
 `--tt` adds `AlphaBeta+Ordering+TT` for optional transposition-table comparison. Play mode already uses a TT.
+`--no-quiescence` compares Minimax and Alpha-Beta without leaf capture search (Minimax cutoffs stay 0). `--runs N` repeats each search and records median time.
 
 Generate thesis-style CSV + Markdown (hypotheses H1–H5):
 
 ```bash
 python -m chessmind_ab report --depths 1,2 --report-dir experiment_out
+python -m chessmind_ab report --depths 1,2,3 --no-quiescence --runs 3 --report-dir experiment_out
 ```
 
-Use **`--depths 1,2`** so H4/H5 can be judged (a single depth leaves them inconclusive).
-Higher depths get slow because of quiescence. Generated files stay local (`experiment_out/` is gitignored).
+Use **at least two depths** so H4/H5 can be judged (a single depth leaves them inconclusive).
+With quiescence, depth 3+ is slow. `--no-quiescence` is the practical path for deeper academic comparisons. Generated files stay local (`experiment_out/` is gitignored).
 
 How to read the verdicts:
 

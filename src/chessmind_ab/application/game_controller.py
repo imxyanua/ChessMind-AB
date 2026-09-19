@@ -6,6 +6,7 @@ import os
 import random
 from dataclasses import dataclass
 
+from chessmind_ab.domain.attack_detector import AttackDetector
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
@@ -103,6 +104,25 @@ class GameController:
         if self._state.status is not GameStatus.ONGOING:
             return []
         return LegalMoveGenerator.generate(self._state)
+
+    def checked_king_position(self, state: GameState | None = None) -> Position | None:
+        """Return the side-to-move king square when that king is in check."""
+        current = state if state is not None else self._state
+        if current.status is not GameStatus.ONGOING:
+            return None
+        if AttackDetector.is_king_in_check(current, current.side_to_move):
+            return current.board.find_king(current.side_to_move)
+        return None
+
+    def cancel_search(self) -> None:
+        cancel = getattr(self._search, "cancel", None)
+        if callable(cancel):
+            cancel()
+
+    def _reset_search_cancel(self) -> None:
+        reset = getattr(self._search, "reset_cancel", None)
+        if callable(reset):
+            reset()
 
     def get_last_search_result(self) -> SearchResult | None:
         return self._last_search_result
@@ -280,6 +300,7 @@ class GameController:
         if self._state.status is not GameStatus.ONGOING:
             return MoveResult(False, "Game already over", self._state)
 
+        self._reset_search_cancel()
         diff = difficulty or self._difficulty
         depth = diff.depth if difficulty is not None else self._ai_depth
 

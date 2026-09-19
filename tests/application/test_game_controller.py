@@ -19,6 +19,31 @@ def test_start_new_game_has_initial_setup() -> None:
     assert len(controller.get_legal_moves()) > 0
 
 
+def test_checked_king_position_when_in_check() -> None:
+    controller = GameController(ai_depth=1)
+    board = Board()
+    board.set_piece(
+        Position.from_chess_notation("e1"),
+        Piece(type=PieceType.KING, color=Color.WHITE),
+    )
+    board.set_piece(
+        Position.from_chess_notation("e8"),
+        Piece(type=PieceType.KING, color=Color.BLACK),
+    )
+    board.set_piece(
+        Position.from_chess_notation("e2"),
+        Piece(type=PieceType.ROOK, color=Color.BLACK),
+    )
+    state = GameState(
+        board=board,
+        side_to_move=Color.WHITE,
+        status=GameStatus.ONGOING,
+        ply_count=1,
+    )
+    square = controller.checked_king_position(state)
+    assert square == Position.from_chess_notation("e1")
+
+
 def test_invalid_player_move_is_rejected() -> None:
     controller = GameController()
     controller.start_new_game()

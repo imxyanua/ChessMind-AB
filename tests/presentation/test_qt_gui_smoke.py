@@ -76,6 +76,14 @@ def test_qt_panels_match_board_height_and_actions_are_wide(qapp) -> None:
     window.close()
 
 
+def test_qt_new_game_stays_enabled_while_ai_busy(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    window._ai_busy = True
+    window._set_controls_enabled(False)
+    assert window.new_btn.isEnabled()
+    window.close()
+
+
 def test_qt_action_buttons_do_not_overlap(qapp) -> None:
     window = ChessMainWindow(difficulty_key="beginner")
     window.show()
