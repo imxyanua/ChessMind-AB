@@ -9,7 +9,6 @@ from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
 from chessmind_ab.domain.game_status_evaluator import GameStatusEvaluator
-from chessmind_ab.domain.legal_move_generator import LegalMoveGenerator
 from chessmind_ab.domain.move import Move
 from chessmind_ab.domain.state_transition import StateTransition
 from chessmind_ab.search.debug_log import log_search, move_label
@@ -31,12 +30,22 @@ class AlphaBetaSearch:
         diversity_window: int = 0,
         rng: random.Random | None = None,
         transposition_table: TranspositionTable | None = None,
+        *,
+        use_quiescence: bool = True,
     ) -> None:
         self._evaluation = evaluation or EvaluationFunction()
         self._move_ordering = move_ordering
         self._diversity_window = max(0, diversity_window)
         self._rng = rng
         self._tt = transposition_table
+        self._use_quiescence = use_quiescence
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def reset_cancel(self) -> None:
+        self._cancelled = False
 
     def find_best_move(
         self,
@@ -58,7 +67,7 @@ class AlphaBetaSearch:
 
         stats = SearchStatistics()
         started = time.perf_counter()
-        status = GameStatusEvaluator.evaluate(state)
+        status, moves = GameStatusEvaluator.evaluate_with_moves(state)
         if status is not GameStatus.ONGOING:
             stats.terminal_nodes += 1
             stats.nodes_visited += 1
@@ -69,7 +78,6 @@ class AlphaBetaSearch:
                 statistics=stats,
             )
 
-        moves = LegalMoveGenerator.generate(state)
         if self._move_ordering is not None:
             moves = self._move_ordering.order(state, moves)
         stats.generated_moves += len(moves)
@@ -80,6 +88,8 @@ class AlphaBetaSearch:
         best_score = float("-inf") if state.side_to_move is Color.WHITE else float("inf")
 
         for move in moves:
+            if self._cancelled:
+                break
             child = StateTransition.apply(state, move)
             score = self._search(child, depth - 1, 1, alpha, beta, stats)
             scored_moves.append((move, score))
@@ -154,6 +164,8 @@ class AlphaBetaSearch:
         stats: SearchStatistics,
     ) -> int:
         stats.nodes_visited += 1
+        if self._cancelled:
+            return 0
         original_alpha = alpha
         key = zobrist_hash(state) if self._tt is not None else 0
 
@@ -162,7 +174,7 @@ class AlphaBetaSearch:
             if cached is not None:
                 return cached
 
-        status = GameStatusEvaluator.evaluate(state)
+        status, moves = GameStatusEvaluator.evaluate_with_moves(state)
         if status is not GameStatus.ONGOING:
             stats.terminal_nodes += 1
             score = terminal_score(status, distance_from_root)
@@ -171,20 +183,24 @@ class AlphaBetaSearch:
             return score
 
         if depth == 0:
-            score = quiescence(
-                state,
-                alpha,
-                beta,
-                distance_from_root,
-                self._evaluation,
-                stats,
-                self._move_ordering,
-            )
+            if self._use_quiescence:
+                score = quiescence(
+                    state,
+                    alpha,
+                    beta,
+                    distance_from_root,
+                    self._evaluation,
+                    stats,
+                    self._move_ordering,
+                    legal_moves=moves,
+                )
+            else:
+                stats.evaluated_leaf_nodes += 1
+                score = self._evaluation.evaluate(state)
             if self._tt is not None:
                 self._tt.store(key, depth, score, TTFlag.EXACT)
             return score
 
-        moves = LegalMoveGenerator.generate(state)
         if self._move_ordering is not None:
             moves = self._move_ordering.order(state, moves)
         stats.generated_moves += len(moves)
@@ -192,6 +208,8 @@ class AlphaBetaSearch:
         if state.side_to_move is Color.WHITE:
             best = float("-inf")
             for index, move in enumerate(moves):
+                if self._cancelled:
+                    break
                 child = StateTransition.apply(state, move)
                 score = self._search(
                     child, depth - 1, distance_from_root + 1, alpha, beta, stats
@@ -211,8 +229,10 @@ class AlphaBetaSearch:
                         cutoff=cutoff,
                     )
                     break
+            if best in {float("-inf"), float("inf")}:
+                return 0
             best_i = int(best)
-            if self._tt is not None:
+            if self._tt is not None and not self._cancelled:
                 flag = TTFlag.EXACT
                 if best_i <= original_alpha:
                     flag = TTFlag.UPPER
@@ -223,6 +243,8 @@ class AlphaBetaSearch:
 
         best = float("inf")
         for index, move in enumerate(moves):
+            if self._cancelled:
+                break
             child = StateTransition.apply(state, move)
             score = self._search(
                 child, depth - 1, distance_from_root + 1, alpha, beta, stats
@@ -242,8 +264,10 @@ class AlphaBetaSearch:
                     cutoff=cutoff,
                 )
                 break
+        if best in {float("-inf"), float("inf")}:
+            return 0
         best_i = int(best)
-        if self._tt is not None:
+        if self._tt is not None and not self._cancelled:
             flag = TTFlag.EXACT
             if best_i <= original_alpha:
                 flag = TTFlag.UPPER

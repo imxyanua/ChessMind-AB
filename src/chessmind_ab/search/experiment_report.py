@@ -262,20 +262,30 @@ def render_markdown(
             "",
             "- Correctness compares search scores, not play Elo.",
             "- Timing depends on hardware; node/cutoff counts are the primary metrics.",
-            "- Quiescence may expand leaves beyond the nominal depth.",
+            "- With quiescence on, leaves expand beyond the nominal depth and Minimax may record qsearch cutoffs.",
+            "- Use --no-quiescence on benchmark/report for a pure Minimax vs Alpha-Beta comparison.",
             "",
         ]
     )
     return "\n".join(parts)
 
 
-def build_report(depths: list[int] | None = None) -> ExperimentReport:
+def build_report(
+    depths: list[int] | None = None,
+    *,
+    use_quiescence: bool = True,
+    runs: int = 1,
+) -> ExperimentReport:
     use_depths = depths or [1, 2]
     rows: list[BenchmarkRow] = []
     for depth in use_depths:
         if depth < 1:
             raise ValueError("depth must be >= 1")
-        rows.extend(run_benchmark(depth=depth))
+        rows.extend(
+            run_benchmark(
+                depth=depth, use_quiescence=use_quiescence, runs=runs
+            )
+        )
     hypotheses = analyze_hypotheses(rows)
     markdown = render_markdown(rows, hypotheses)
     return ExperimentReport(
@@ -292,8 +302,12 @@ def write_report(
     *,
     csv_name: str = "experiment_results.csv",
     md_name: str = "experiment_report.md",
+    use_quiescence: bool = True,
+    runs: int = 1,
 ) -> tuple[Path, Path, ExperimentReport]:
-    report = build_report(depths=depths)
+    report = build_report(
+        depths=depths, use_quiescence=use_quiescence, runs=runs
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = write_benchmark_csv(report.rows, output_dir / csv_name)
     md_path = output_dir / md_name
