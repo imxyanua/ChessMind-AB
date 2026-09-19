@@ -1,6 +1,7 @@
 """Unit tests for strengthened MoveOrdering."""
 
 from chessmind_ab.domain.board import Board
+from chessmind_ab.domain.castling_rights import CastlingRights
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
@@ -40,6 +41,43 @@ def test_ordering_preserves_move_set() -> None:
     ordered = MoveOrdering.order(state, moves)
     assert len(ordered) == len(moves)
     assert set(ordered) == set(moves)
+
+
+def test_en_passant_is_ordered_as_capture() -> None:
+    state = GameState(
+        board=Board(),
+        side_to_move=Color.WHITE,
+        status=GameStatus.ONGOING,
+        ply_count=0,
+        castling_rights=CastlingRights(
+            white_king_side=False,
+            white_queen_side=False,
+            black_king_side=False,
+            black_queen_side=False,
+        ),
+        en_passant_target=Position.from_chess_notation("d6"),
+    )
+    for notation, piece in {
+        "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+        "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+        "e5": Piece(type=PieceType.PAWN, color=Color.WHITE),
+        "d5": Piece(type=PieceType.PAWN, color=Color.BLACK),
+        "h2": Piece(type=PieceType.PAWN, color=Color.WHITE),
+    }.items():
+        state.board.set_piece(Position.from_chess_notation(notation), piece)
+
+    ordered = MoveOrdering.order(state, LegalMoveGenerator.generate(state))
+    ep_index = next(
+        index
+        for index, move in enumerate(ordered)
+        if move.move_type is MoveType.EN_PASSANT
+    )
+    quiet_index = next(
+        index
+        for index, move in enumerate(ordered)
+        if move.move_type is MoveType.NORMAL
+    )
+    assert ep_index < quiet_index
 
 
 def test_mvv_lva_prefers_capturing_queen_over_pawn() -> None:
