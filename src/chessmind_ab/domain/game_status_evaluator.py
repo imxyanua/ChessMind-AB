@@ -40,18 +40,22 @@ class GameStatusEvaluator:
 
     @staticmethod
     def _insufficient_material(state: GameState) -> bool:
-        pieces: list[tuple[PieceType, Color]] = []
+        knights = 0
+        bishop_colors: list[int] = []
         for row in range(8):
             for column in range(8):
                 piece = state.board.get_piece(Position(row=row, column=column))
-                if piece is not None:
-                    pieces.append((piece.type, piece.color))
-        non_kings = [item for item in pieces if item[0] is not PieceType.KING]
-        if not non_kings:
+                if piece is None or piece.type is PieceType.KING:
+                    continue
+                if piece.type is PieceType.KNIGHT:
+                    knights += 1
+                    continue
+                if piece.type is PieceType.BISHOP:
+                    bishop_colors.append((row + column) % 2)
+                    continue
+                return False
+        if knights:
+            return knights == 1 and not bishop_colors
+        if not bishop_colors:
             return True
-        if len(non_kings) == 1 and non_kings[0][0] in {
-            PieceType.KNIGHT,
-            PieceType.BISHOP,
-        }:
-            return True
-        return False
+        return len(set(bishop_colors)) == 1

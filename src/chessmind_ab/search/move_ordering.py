@@ -35,7 +35,7 @@ class MoveOrdering:
                 capture_bonus = MATERIAL_VALUES.get(move.captured_piece.type, 0)
             return (0, -(promo + capture_bonus))
 
-        if move.move_type is MoveType.CAPTURE:
+        if move.move_type in {MoveType.CAPTURE, MoveType.EN_PASSANT}:
             if move.captured_piece is None:
                 return (1, 0)
             victim = MATERIAL_VALUES.get(move.captured_piece.type, 0)

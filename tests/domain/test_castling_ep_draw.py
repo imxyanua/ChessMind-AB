@@ -151,3 +151,49 @@ def test_insufficient_material_draw() -> None:
         }
     )
     assert GameStatusEvaluator.evaluate(state) is GameStatus.DRAW
+
+
+def test_insufficient_king_and_minor_vs_king() -> None:
+    knight_only = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "b1": Piece(type=PieceType.KNIGHT, color=Color.WHITE),
+        }
+    )
+    bishop_only = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "c1": Piece(type=PieceType.BISHOP, color=Color.WHITE),
+        }
+    )
+    assert GameStatusEvaluator.evaluate(knight_only) is GameStatus.DRAW
+    assert GameStatusEvaluator.evaluate(bishop_only) is GameStatus.DRAW
+
+
+def test_same_color_bishops_are_insufficient() -> None:
+    # c1 is (7, 2) odd; a8 is (0, 0) even? a8 = row 0 col 0 even.
+    # c1 (7+2=9 odd). f8 (0+5=5 odd). Both odd = same color.
+    state = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "c1": Piece(type=PieceType.BISHOP, color=Color.WHITE),
+            "f8": Piece(type=PieceType.BISHOP, color=Color.BLACK),
+        }
+    )
+    assert GameStatusEvaluator.evaluate(state) is GameStatus.DRAW
+
+
+def test_opposite_color_bishops_are_not_auto_draw() -> None:
+    # c1 odd; c8 = row 0 col 2 even.
+    state = _state(
+        {
+            "e1": Piece(type=PieceType.KING, color=Color.WHITE),
+            "e8": Piece(type=PieceType.KING, color=Color.BLACK),
+            "c1": Piece(type=PieceType.BISHOP, color=Color.WHITE),
+            "c8": Piece(type=PieceType.BISHOP, color=Color.BLACK),
+        }
+    )
+    assert GameStatusEvaluator.evaluate(state) is GameStatus.ONGOING
