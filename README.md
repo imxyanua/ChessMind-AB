@@ -39,7 +39,7 @@ How to play:
 
 1. A window opens with three columns: **board**, **info/controls**, and **SAN move history**.
 2. Pick **Mode**: **Player vs AI** or **AI vs AI**.
-3. In Player vs AI: choose **Play as** White or Black (board flips when you play Black; AI moves first) and one **Difficulty**.
+3. In Player vs AI: choose **Play as** White or Black (the board turns 180 degrees like chess.com so you stay at the bottom; AI moves first as Black) and one **Difficulty**.
 4. In AI vs AI: set **White AI** / **Black AI** Elo (same or different), **Speed**, then **Start** / **Pause** / **Stop** / **Step**.
 5. Click your piece, then a marked destination (dot/ring); pieces **slide** to the target (including castling rook). Pawn promotion asks for **Queen / Rook / Bishop / Knight**.
 6. Switch **Board/UI themes**, view **captured pieces** in the info column.

@@ -51,6 +51,17 @@ def test_qt_play_as_black_flips_board(qapp) -> None:
     window = ChessMainWindow(difficulty_key="beginner")
     window.side_box.setCurrentText("Black")
     assert window.controller.get_player_color() is Color.BLACK
+    assert window.board.is_animating
+    assert window.board.geometry_helper.flipped is False
+    assert _wait_until(
+        qapp,
+        lambda: (
+            window.board.geometry_helper.flipped is True
+            and not window.board.is_animating
+            and not window._animating
+        ),
+        timeout_s=3.0,
+    )
     assert window.board.geometry_helper.flipped is True
     if window._worker is not None:
         window._worker.wait(8000)
@@ -61,6 +72,28 @@ def test_qt_play_as_black_flips_board(qapp) -> None:
             timeout_s=3.0,
         )
     window.close()
+
+
+def test_qt_viewpoint_flip_slides_pieces_upright(qapp) -> None:
+    from chessmind_ab.domain.initial_position import create_initial_game_state
+    from chessmind_ab.presentation.qt_board import ChessBoardWidget
+
+    board = ChessBoardWidget()
+    board.sync(create_initial_game_state())
+    finished = {"done": False}
+
+    def _done() -> None:
+        finished["done"] = True
+
+    board.animate_viewpoint_flip(True, on_finished=_done, duration_ms=1)
+    assert board.is_animating
+    assert board.hidden
+    assert _wait_until(
+        qapp, lambda: finished["done"] and not board.is_animating, timeout_s=2.0
+    )
+    assert board.geometry_helper.flipped is True
+    assert not board.hidden
+    board.close()
 
 
 def test_qt_panels_match_board_height_and_actions_are_wide(qapp) -> None:

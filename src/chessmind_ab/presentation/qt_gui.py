@@ -996,17 +996,18 @@ class ChessMainWindow(QMainWindow):
         self._match_step_once = False
         if self._is_ai_vs_ai():
             self.controller.set_player_color(Color.WHITE)
-            self.board.set_flipped(False)
             self.side_box.blockSignals(True)
             self.side_box.setCurrentText("White")
             self.side_box.blockSignals(False)
             self._apply_mode_visibility()
-            self._start_fresh("AI vs AI ready. Press Start or Step.", auto_ai=False)
+            self._reset_game_and_turn_board(
+                False, "AI vs AI ready. Press Start or Step.", auto_ai=False
+            )
         else:
             self._apply_mode_visibility()
             color = self.controller.get_player_color()
-            self.board.set_flipped(color is Color.BLACK)
-            self._start_fresh(
+            self._reset_game_and_turn_board(
+                color is Color.BLACK,
                 "Player vs AI. Your move."
                 if color is Color.WHITE
                 else "Player vs AI. AI moves first.",
@@ -1014,7 +1015,7 @@ class ChessMainWindow(QMainWindow):
             )
 
     def _on_side_changed(self, side: str) -> None:
-        if self._ai_busy or self._is_ai_vs_ai():
+        if self._is_ai_vs_ai():
             color = self.controller.get_player_color()
             self.side_box.blockSignals(True)
             self.side_box.setCurrentText("White" if color is Color.WHITE else "Black")
@@ -1022,12 +1023,58 @@ class ChessMainWindow(QMainWindow):
             return
         color = Color.WHITE if side == "White" else Color.BLACK
         self.controller.set_player_color(color)
-        self.board.set_flipped(color is Color.BLACK)
-        self._start_fresh(
+        self._reset_game_and_turn_board(
+            color is Color.BLACK,
             "Playing as White. Your move."
             if color is Color.WHITE
-            else "Playing as Black. AI moves first."
+            else "Playing as Black. AI moves first.",
+            auto_ai=True,
         )
+
+    def _reset_game_and_turn_board(
+        self, want_flipped: bool, message: str, *, auto_ai: bool
+    ) -> None:
+        """New game, then rotate the board 180 degrees if the seat changed."""
+        self._abort_worker()
+        self.board.cancel_animation(run_callback=False)
+        self._animating = False
+        self._exit_review()
+        self.controller.start_new_game()
+        self.selected = None
+        self.targets.clear()
+        self.captures.clear()
+        self.last_from = None
+        self.last_to = None
+        if self.board.geometry_helper.flipped is want_flipped:
+            self._set_controls_enabled(True)
+            self._refresh(message=message)
+            if (
+                auto_ai
+                and not self._is_ai_vs_ai()
+                and self.controller.get_state().side_to_move
+                is not self.controller.get_player_color()
+            ):
+                self._start_ai()
+            return
+
+        self._set_controls_enabled(False)
+        self.new_btn.setEnabled(True)
+        self._refresh(message="Turning the board...")
+        self._animating = True
+
+        def _done() -> None:
+            self._animating = False
+            self._set_controls_enabled(True)
+            self._refresh(message=message)
+            if (
+                auto_ai
+                and not self._is_ai_vs_ai()
+                and self.controller.get_state().side_to_move
+                is not self.controller.get_player_color()
+            ):
+                self._start_ai()
+
+        self.board.animate_viewpoint_flip(want_flipped, on_finished=_done)
 
     def _abort_worker(self) -> None:
         worker = self._worker
