@@ -260,6 +260,12 @@ class ChessMainWindow(QMainWindow):
         body_layout.addLayout(self.side_row)
         self.side_box.currentTextChanged.connect(self._on_side_changed)
 
+        self.seat_box = QComboBox()
+        self.seat_box.addItems(["Bottom", "Top"])
+        self.seat_row = self._labeled("Sit at", self.seat_box)
+        body_layout.addLayout(self.seat_row)
+        self.seat_box.currentTextChanged.connect(self._on_seat_changed)
+
         self.diff_box = QComboBox()
         for diff in DIFFICULTIES.values():
             self.diff_box.addItem(diff.label, diff.key)
@@ -690,6 +696,7 @@ class ChessMainWindow(QMainWindow):
     def _apply_mode_visibility(self) -> None:
         ai_match = self._is_ai_vs_ai()
         self._set_layout_visible(self.side_row, not ai_match)
+        self._set_layout_visible(self.seat_row, not ai_match)
         self._set_layout_visible(self.diff_row, not ai_match)
         self.diff_desc.setVisible(not ai_match)
         self._set_layout_visible(self.white_diff_row, ai_match)
@@ -730,6 +737,7 @@ class ChessMainWindow(QMainWindow):
         for widget in (
             self.mode_box,
             self.side_box,
+            self.seat_box,
             self.diff_box,
             self.white_diff_box,
             self.black_diff_box,
@@ -1007,12 +1015,20 @@ class ChessMainWindow(QMainWindow):
             self._apply_mode_visibility()
             color = self.controller.get_player_color()
             self._reset_game_and_turn_board(
-                color is Color.BLACK,
+                self._want_flipped(),
                 "Player vs AI. Your move."
                 if color is Color.WHITE
                 else "Player vs AI. AI moves first.",
                 auto_ai=True,
             )
+
+    def _seat_is_top(self) -> bool:
+        return self.seat_box.currentText() == "Top"
+
+    def _want_flipped(self) -> bool:
+        """Black at the bottom of the widget (180 degree view)."""
+        playing_black = self.controller.get_player_color() is Color.BLACK
+        return playing_black != self._seat_is_top()
 
     def _on_side_changed(self, side: str) -> None:
         if self._is_ai_vs_ai():
@@ -1024,12 +1040,43 @@ class ChessMainWindow(QMainWindow):
         color = Color.WHITE if side == "White" else Color.BLACK
         self.controller.set_player_color(color)
         self._reset_game_and_turn_board(
-            color is Color.BLACK,
+            self._want_flipped(),
             "Playing as White. Your move."
             if color is Color.WHITE
             else "Playing as Black. AI moves first.",
             auto_ai=True,
         )
+
+    def _on_seat_changed(self, seat: str) -> None:
+        if self._is_ai_vs_ai() or self._busy():
+            playing_black = self.controller.get_player_color() is Color.BLACK
+            shown_top = playing_black != self.board.geometry_helper.flipped
+            self.seat_box.blockSignals(True)
+            self.seat_box.setCurrentText("Top" if shown_top else "Bottom")
+            self.seat_box.blockSignals(False)
+            return
+        if seat not in {"Top", "Bottom"}:
+            return
+        where = "top" if self._seat_is_top() else "bottom"
+        self._turn_board_in_place(f"You sit at the {where}.")
+
+    def _turn_board_in_place(self, message: str) -> None:
+        """Rotate the current game to the selected seat. Does not start a new game."""
+        want = self._want_flipped()
+        if self.board.geometry_helper.flipped is want:
+            self._refresh(message=message)
+            return
+        self._set_controls_enabled(False)
+        self.new_btn.setEnabled(True)
+        self._refresh(message="Turning the board...")
+        self._animating = True
+
+        def _done() -> None:
+            self._animating = False
+            self._set_controls_enabled(True)
+            self._refresh(message=message)
+
+        self.board.animate_viewpoint_flip(want, on_finished=_done)
 
     def _reset_game_and_turn_board(
         self, want_flipped: bool, message: str, *, auto_ai: bool

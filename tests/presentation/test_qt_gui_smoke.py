@@ -74,6 +74,56 @@ def test_qt_play_as_black_flips_board(qapp) -> None:
     window.close()
 
 
+def test_qt_sit_at_top_flips_white_view(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    assert window.seat_box.currentText() == "Bottom"
+    assert window.board.geometry_helper.flipped is False
+    window.seat_box.setCurrentText("Top")
+    assert window.board.is_animating
+    assert _wait_until(
+        qapp,
+        lambda: (
+            window.board.geometry_helper.flipped is True
+            and not window.board.is_animating
+            and not window._animating
+        ),
+        timeout_s=3.0,
+    )
+    assert window.controller.get_player_color() is Color.WHITE
+    assert window.board.geometry_helper.flipped is True
+    window.close()
+
+
+def test_qt_black_and_sit_at_top_is_unflipped(qapp) -> None:
+    window = ChessMainWindow(difficulty_key="beginner")
+    window.side_box.setCurrentText("Black")
+    assert _wait_until(
+        qapp,
+        lambda: window.board.geometry_helper.flipped is True and not window._animating,
+        timeout_s=3.0,
+    )
+    if window._worker is not None:
+        window._worker.wait(8000)
+        qapp.processEvents()
+        _wait_until(
+            qapp,
+            lambda: not window._animating and not window.board.is_animating,
+            timeout_s=3.0,
+        )
+    window.seat_box.setCurrentText("Top")
+    assert _wait_until(
+        qapp,
+        lambda: (
+            window.board.geometry_helper.flipped is False
+            and not window.board.is_animating
+            and not window._animating
+        ),
+        timeout_s=3.0,
+    )
+    assert window.controller.get_player_color() is Color.BLACK
+    window.close()
+
+
 def test_qt_viewpoint_flip_slides_pieces_upright(qapp) -> None:
     from chessmind_ab.domain.initial_position import create_initial_game_state
     from chessmind_ab.presentation.qt_board import ChessBoardWidget
@@ -317,6 +367,7 @@ def test_qt_ai_vs_ai_mode_widgets_and_step(qapp) -> None:
     assert not window.match_panel.isHidden()
     assert window.step_btn.isEnabled()
     assert window.side_box.isHidden()
+    assert window.seat_box.isHidden()
 
     # Board clicks are ignored in spectator mode.
     before = window.controller.get_state().ply_count
@@ -343,5 +394,6 @@ def test_qt_ai_vs_ai_mode_widgets_and_step(qapp) -> None:
     qapp.processEvents()
     assert not window._is_ai_vs_ai()
     assert not window.side_box.isHidden()
+    assert not window.seat_box.isHidden()
     assert window.match_panel.isHidden()
     window.close()
