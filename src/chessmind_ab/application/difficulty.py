@@ -1,4 +1,4 @@
-"""Play difficulty presets mapped from human-facing Elo labels."""
+"""Play difficulty presets with chess.com-calibrated Elo labels."""
 
 from __future__ import annotations
 
@@ -24,7 +24,11 @@ class Difficulty:
         return f"{self.name} · ~{self.elo} Elo"
 
 
-# Strength gaps are intentional for play / AI vs AI demos:
+# Elo numbers are an approximate chess.com (new-player / bot) scale, not FIDE.
+# Calibrated so Medium plays around chess.com ~300. Python search + simple eval
+# is much weaker than the old 600-1400 labels suggested.
+#
+# Strength gaps stay intentional:
 # - depth steps up every tier (no shared max depth between neighbors)
 # - weaker tiers keep a wide root diversity window (centipawns)
 # - Beginner skips the opening book so early play is not "too correct"
@@ -32,57 +36,57 @@ DIFFICULTIES: dict[str, Difficulty] = {
     "beginner": Difficulty(
         key="beginner",
         name="Beginner",
-        elo=600,
+        elo=100,
         depth=1,
         diversity_window=280,
         early_diversity_window=320,
         use_opening_book=False,
         time_budget_ms=200,
-        description="Depth 1, no book, often picks near-best moves — blunders freely.",
+        description="Depth 1, no book, often picks near-best moves. Blunders freely. ~100 chess.com.",
     ),
     "easy": Difficulty(
         key="easy",
         name="Easy",
-        elo=800,
+        elo=200,
         depth=2,
         diversity_window=160,
         early_diversity_window=220,
         use_opening_book=True,
         time_budget_ms=450,
-        description="Shallow look-ahead with wide move variety; still forgiving.",
+        description="Shallow look-ahead with wide move variety; still forgiving. ~200 chess.com.",
     ),
     "medium": Difficulty(
         key="medium",
         name="Medium",
-        elo=1000,
+        elo=300,
         depth=3,
         diversity_window=70,
         early_diversity_window=110,
         use_opening_book=True,
         time_budget_ms=1200,
-        description="Solid casual play: deeper ID and tighter move choice.",
+        description="Casual play: deeper ID and tighter move choice. ~300 chess.com.",
     ),
     "hard": Difficulty(
         key="hard",
         name="Hard",
-        elo=1200,
+        elo=450,
         depth=4,
         diversity_window=25,
         early_diversity_window=45,
         use_opening_book=True,
         time_budget_ms=2500,
-        description="Deeper search and longer think; fewer free gifts.",
+        description="Deeper search and longer think; fewer free gifts. ~450 chess.com.",
     ),
     "expert": Difficulty(
         key="expert",
         name="Expert",
-        elo=1400,
+        elo=600,
         depth=6,
         diversity_window=0,
         early_diversity_window=0,
         use_opening_book=True,
         time_budget_ms=5000,
-        description="Deepest preset, always takes the best root move, longest think.",
+        description="Deepest preset, always the best root move. ~600 chess.com, not FIDE club.",
     ),
 }
 

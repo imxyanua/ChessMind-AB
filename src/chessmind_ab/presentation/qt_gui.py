@@ -204,7 +204,7 @@ class ChessMainWindow(QMainWindow):
         self.title = QLabel("ChessMind-AB")
         self.title.setObjectName("appTitle")
         self.title.setFont(QFont("Segoe UI", 17, QFont.Weight.DemiBold))
-        self.subtitle = QLabel("Player vs AI  ·  Elo modes")
+        self.subtitle = QLabel("Player vs AI  ·  chess.com Elo")
         self.subtitle.setObjectName("appSubtitle")
         info_layout.addWidget(self.title)
         info_layout.addWidget(self.subtitle)
@@ -846,7 +846,7 @@ class ChessMainWindow(QMainWindow):
             white = self._difficulty_for_side(Color.WHITE)
             black = self._difficulty_for_side(Color.BLACK)
             self.mode_value.setText(f"AI vs AI · {white.name}/{black.name}")
-            self.subtitle.setText("Spectator mode  ·  dual Elo engines")
+            self.subtitle.setText("Spectator mode  ·  dual chess.com Elo")
         else:
             self.mode_value.setText(diff.label)
             side = "White" if self.controller.get_player_color() is Color.WHITE else "Black"
