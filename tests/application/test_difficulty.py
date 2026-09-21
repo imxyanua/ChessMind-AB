@@ -10,8 +10,9 @@ from chessmind_ab.application.game_controller import GameController
 
 def test_five_elo_presets_exist() -> None:
     assert set(DIFFICULTIES) == {"beginner", "easy", "medium", "hard", "expert"}
-    assert get_difficulty("beginner").elo == 600
-    assert get_difficulty("expert").elo == 1400
+    assert get_difficulty("beginner").elo == 100
+    assert get_difficulty("medium").elo == 300
+    assert get_difficulty("expert").elo == 600
 
 
 def test_strength_gaps_are_monotonic() -> None:
@@ -36,7 +37,7 @@ def test_controller_applies_difficulty() -> None:
     assert controller._ai_depth == get_difficulty("beginner").depth
     assert controller.get_difficulty().time_budget_ms is not None
     controller.set_difficulty("hard")
-    assert controller.get_difficulty().elo == 1200
+    assert controller.get_difficulty().elo == 450
     assert controller._ai_depth == get_difficulty("hard").depth
 
 
@@ -45,6 +46,14 @@ def test_play_presets_have_time_budgets_for_id() -> None:
         assert diff.time_budget_ms is not None, key
         assert diff.time_budget_ms > 0, key
         assert diff.depth >= 1, key
+
+
+def test_elo_labels_are_monotonic_chesscom_scale() -> None:
+    order = ["beginner", "easy", "medium", "hard", "expert"]
+    elos = [get_difficulty(key).elo for key in order]
+    assert elos == sorted(elos)
+    assert elos == sorted(set(elos))
+    assert get_difficulty("medium").elo == 300
 
 
 def test_label_roundtrip() -> None:
