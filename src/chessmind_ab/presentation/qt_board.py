@@ -53,6 +53,8 @@ class ChessBoardWidget(QWidget):
         self._anim_elapsed_ms = 0
         self._anim_duration_ms = 0
         self._anim_callback: Callable[[], None] | None = None
+        self._board_spin = 0.0
+        self._pending_flipped: bool | None = None
         self._anim_timer = QTimer(self)
         self._anim_timer.setInterval(16)
         self._anim_timer.timeout.connect(self._on_anim_tick)
@@ -74,7 +76,61 @@ class ChessBoardWidget(QWidget):
 
     def set_flipped(self, flipped: bool) -> None:
         self.geometry_helper.flipped = flipped
+        self._board_spin = 0.0
+        self._pending_flipped = None
         self.update()
+
+    def animate_viewpoint_flip(
+        self,
+        flipped: bool,
+        *,
+        on_finished: Callable[[], None] | None = None,
+        duration_ms: int = 520,
+    ) -> None:
+        """Rotate the viewpoint 180 degrees like chess.com (player stays at the bottom).
+
+        Squares spin with the board. Piece sprites stay upright and slide to the
+        new screen seats. ``flipped`` is applied when the motion finishes.
+        """
+        if self.geometry_helper.flipped is flipped:
+            if on_finished is not None:
+                on_finished()
+            return
+
+        self.cancel_animation(run_callback=False)
+        if self.state is None:
+            self.set_flipped(flipped)
+            if on_finished is not None:
+                on_finished()
+            return
+
+        old_flipped = self.geometry_helper.flipped
+        slides: list[_FloatSlide] = []
+        hidden: set[Position] = set()
+        for row in range(8):
+            for column in range(8):
+                position = Position(row=row, column=column)
+                piece = self.state.board.get_piece(position)
+                if piece is None:
+                    continue
+                start = self._square_center(position)
+                self.geometry_helper.flipped = flipped
+                end = self._square_center(position)
+                self.geometry_helper.flipped = old_flipped
+                slides.append(
+                    _FloatSlide(piece=piece, start=start, end=end, pos=QPoint(start))
+                )
+                hidden.add(position)
+
+        self._slides = slides
+        self.hidden = hidden
+        self._board_spin = 0.0
+        self._pending_flipped = flipped
+        self._anim_elapsed_ms = 0
+        self._anim_duration_ms = max(1, duration_ms)
+        self._anim_callback = on_finished
+        self.update()
+        self._anim_timer.start()
 
     def set_theme(self, name: str) -> None:
         self.board_theme = BOARD_THEMES[name]
@@ -174,18 +230,24 @@ class ChessBoardWidget(QWidget):
         self._anim_elapsed_ms = 0
         self._anim_duration_ms = 0
         self.hidden = set()
+        if self._pending_flipped is not None:
+            self.geometry_helper.flipped = self._pending_flipped
+            self._pending_flipped = None
+        self._board_spin = 0.0
         if was_active:
             self.update()
         if run_callback and callback is not None:
             callback()
 
     def _on_anim_tick(self) -> None:
-        if not self._slides:
+        if not self._slides and self._pending_flipped is None:
             self.cancel_animation(run_callback=True)
             return
         self._anim_elapsed_ms += self._anim_timer.interval()
         t = min(1.0, self._anim_elapsed_ms / self._anim_duration_ms)
         e = _ease_out_cubic(t)
+        if self._pending_flipped is not None:
+            self._board_spin = 180.0 * e
         for slide in self._slides:
             x = slide.start.x() + (slide.end.x() - slide.start.x()) * e
             y = slide.start.y() + (slide.end.y() - slide.start.y()) * e
@@ -199,7 +261,13 @@ class ChessBoardWidget(QWidget):
         self._anim_timer.stop()
         self._anim_callback = None
         self._slides = []
+        self._anim_elapsed_ms = 0
+        self._anim_duration_ms = 0
         self.hidden = set()
+        if self._pending_flipped is not None:
+            self.geometry_helper.flipped = self._pending_flipped
+            self._pending_flipped = None
+        self._board_spin = 0.0
         self.update()
         self.animation_finished.emit()
         if callback is not None:
@@ -255,6 +323,15 @@ class ChessBoardWidget(QWidget):
         if self.state is None:
             return
 
+        spinning = abs(self._board_spin) > 0.01
+        if spinning:
+            center_x = margin + board / 2
+            center_y = margin + board / 2
+            painter.save()
+            painter.translate(center_x, center_y)
+            painter.rotate(self._board_spin)
+            painter.translate(-center_x, -center_y)
+
         for row in range(8):
             for column in range(8):
                 position = Position(row=row, column=column)
@@ -277,22 +354,23 @@ class ChessBoardWidget(QWidget):
                     painter.setBrush(Qt.BrushStyle.NoBrush)
                     painter.drawRect(x0 + 2, y0 + 2, x1 - x0 - 4, y1 - y0 - 4)
 
-                drow, dcol = self.geometry_helper.display_row_column(position)
-                painter.setPen(QColor(theme.coord))
-                font = QFont("Segoe UI", 10, QFont.Weight.DemiBold)
-                painter.setFont(font)
-                if dcol == 0:
-                    painter.drawText(
-                        QRect(0, y0, margin, y1 - y0),
-                        Qt.AlignmentFlag.AlignCenter,
-                        str(8 - position.row),
-                    )
-                if drow == 7:
-                    painter.drawText(
-                        QRect(x0, margin + board, x1 - x0, margin),
-                        Qt.AlignmentFlag.AlignCenter,
-                        chr(ord("a") + position.column),
-                    )
+                if not spinning:
+                    drow, dcol = self.geometry_helper.display_row_column(position)
+                    painter.setPen(QColor(theme.coord))
+                    font = QFont("Segoe UI", 10, QFont.Weight.DemiBold)
+                    painter.setFont(font)
+                    if dcol == 0:
+                        painter.drawText(
+                            QRect(0, y0, margin, y1 - y0),
+                            Qt.AlignmentFlag.AlignCenter,
+                            str(8 - position.row),
+                        )
+                    if drow == 7:
+                        painter.drawText(
+                            QRect(x0, margin + board, x1 - x0, margin),
+                            Qt.AlignmentFlag.AlignCenter,
+                            chr(ord("a") + position.column),
+                        )
 
                 if position in self.targets:
                     cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
@@ -320,6 +398,9 @@ class ChessBoardWidget(QWidget):
                     px = (x0 + x1 - pixmap.width()) // 2
                     py = (y0 + y1 - pixmap.height()) // 2 + 1
                     painter.drawPixmap(px, py, pixmap)
+
+        if spinning:
+            painter.restore()
 
         for slide in self._slides:
             pixmap = self.pieces.get(slide.piece)
