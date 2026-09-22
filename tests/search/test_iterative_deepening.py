@@ -1,6 +1,9 @@
 """Tests for iterative deepening with a soft time budget."""
 
+import time
+
 from chessmind_ab.domain.board import Board
+from chessmind_ab.domain.initial_position import create_initial_game_state
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
 from chessmind_ab.domain.game_status import GameStatus
@@ -63,3 +66,19 @@ def test_fixed_depth_search_still_available_for_benchmarks() -> None:
     )
     assert fixed.best_score == timed.best_score
     assert fixed.statistics.max_depth_reached == 1
+
+
+def test_id_aborts_near_budget_instead_of_waiting_out_max_depth() -> None:
+    search = AlphaBetaSearch(move_ordering=MoveOrdering())
+    started = time.perf_counter()
+    result = iterative_deepening_search(
+        search,
+        create_initial_game_state(),
+        time_budget_ms=80,
+        max_depth=6,
+    )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    assert result.best_move is not None
+    assert elapsed_ms < 700
+    assert result.statistics.max_depth_reached <= 3
+    assert search.was_stopped() is False
