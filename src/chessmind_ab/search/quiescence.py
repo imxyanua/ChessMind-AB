@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from chessmind_ab.domain.attack_detector import AttackDetector
 from chessmind_ab.domain.color import Color
 from chessmind_ab.domain.game_state import GameState
@@ -57,8 +59,11 @@ def _play_moves(
     *,
     is_white: bool,
     best: float,
+    should_stop: Callable[[], bool] | None = None,
 ) -> int:
     for index, move in enumerate(moves):
+        if should_stop is not None and should_stop():
+            break
         child = StateTransition.apply(state, move)
         score = quiescence(
             child,
@@ -68,6 +73,7 @@ def _play_moves(
             evaluation,
             stats,
             move_ordering,
+            should_stop=should_stop,
         )
         if is_white:
             best = max(best, score)
@@ -92,6 +98,7 @@ def quiescence(
     move_ordering: MoveOrdering | None = None,
     *,
     legal_moves: list[Move] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> int:
     """Fail-soft quiescence under WHITE=MAX / BLACK=MIN.
 
@@ -99,6 +106,8 @@ def quiescence(
     In check, every legal evasion is searched (not just captures).
     """
     stats.nodes_visited += 1
+    if should_stop is not None and should_stop():
+        return evaluation.evaluate(state)
 
     if legal_moves is None:
         status, moves = GameStatusEvaluator.evaluate_with_moves(state)
@@ -126,6 +135,7 @@ def quiescence(
             move_ordering,
             is_white=is_white,
             best=float("-inf") if is_white else float("inf"),
+            should_stop=should_stop,
         )
 
     stand_pat = evaluation.evaluate(state)
@@ -155,4 +165,5 @@ def quiescence(
         move_ordering,
         is_white=is_white,
         best=best,
+        should_stop=should_stop,
     )

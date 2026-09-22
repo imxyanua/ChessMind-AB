@@ -40,12 +40,27 @@ class AlphaBetaSearch:
         self._tt = transposition_table
         self._use_quiescence = use_quiescence
         self._cancelled = False
+        self._deadline: float | None = None
 
     def cancel(self) -> None:
         self._cancelled = True
 
     def reset_cancel(self) -> None:
         self._cancelled = False
+
+    def set_deadline(self, deadline: float | None) -> None:
+        self._deadline = deadline
+
+    def was_stopped(self) -> bool:
+        return self._cancelled
+
+    def _should_stop(self) -> bool:
+        if self._cancelled:
+            return True
+        if self._deadline is not None and time.perf_counter() >= self._deadline:
+            self._cancelled = True
+            return True
+        return False
 
     def find_best_move(
         self,
@@ -88,7 +103,7 @@ class AlphaBetaSearch:
         best_score = float("-inf") if state.side_to_move is Color.WHITE else float("inf")
 
         for move in moves:
-            if self._cancelled:
+            if self._should_stop():
                 break
             child = StateTransition.apply(state, move)
             score = self._search(child, depth - 1, 1, alpha, beta, stats)
@@ -164,7 +179,7 @@ class AlphaBetaSearch:
         stats: SearchStatistics,
     ) -> int:
         stats.nodes_visited += 1
-        if self._cancelled:
+        if self._should_stop():
             return 0
         original_alpha = alpha
         key = zobrist_hash(state) if self._tt is not None else 0
@@ -193,6 +208,7 @@ class AlphaBetaSearch:
                     stats,
                     self._move_ordering,
                     legal_moves=moves,
+                    should_stop=self._should_stop,
                 )
             else:
                 stats.evaluated_leaf_nodes += 1
@@ -208,7 +224,7 @@ class AlphaBetaSearch:
         if state.side_to_move is Color.WHITE:
             best = float("-inf")
             for index, move in enumerate(moves):
-                if self._cancelled:
+                if self._should_stop():
                     break
                 child = StateTransition.apply(state, move)
                 score = self._search(
@@ -232,7 +248,7 @@ class AlphaBetaSearch:
             if best in {float("-inf"), float("inf")}:
                 return 0
             best_i = int(best)
-            if self._tt is not None and not self._cancelled:
+            if self._tt is not None and not self._should_stop():
                 flag = TTFlag.EXACT
                 if best_i <= original_alpha:
                     flag = TTFlag.UPPER
@@ -243,7 +259,7 @@ class AlphaBetaSearch:
 
         best = float("inf")
         for index, move in enumerate(moves):
-            if self._cancelled:
+            if self._should_stop():
                 break
             child = StateTransition.apply(state, move)
             score = self._search(
@@ -267,7 +283,7 @@ class AlphaBetaSearch:
         if best in {float("-inf"), float("inf")}:
             return 0
         best_i = int(best)
-        if self._tt is not None and not self._cancelled:
+        if self._tt is not None and not self._should_stop():
             flag = TTFlag.EXACT
             if best_i <= original_alpha:
                 flag = TTFlag.UPPER

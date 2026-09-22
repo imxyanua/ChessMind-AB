@@ -28,7 +28,8 @@ class Difficulty:
 # Calibrated so Medium plays around chess.com ~300. Python search + simple eval
 # is much weaker than the old 600-1400 labels suggested.
 #
-# Strength gaps stay intentional:
+# Strength gaps are from move choice (depth cap + diversity + book), not wait
+# time. ID aborts when the budget expires so Hard/Expert do not sit idle.
 # - depth steps up every tier (no shared max depth between neighbors)
 # - weaker tiers keep a wide root diversity window (centipawns)
 # - Beginner skips the opening book so early play is not "too correct"
@@ -38,21 +39,21 @@ DIFFICULTIES: dict[str, Difficulty] = {
         name="Beginner",
         elo=100,
         depth=1,
-        diversity_window=280,
-        early_diversity_window=320,
+        diversity_window=350,
+        early_diversity_window=420,
         use_opening_book=False,
         time_budget_ms=200,
-        description="Depth 1, no book, often picks near-best moves. Blunders freely. ~100 chess.com.",
+        description="Depth 1, no book, often not the best move. Blunders freely. ~100 chess.com.",
     ),
     "easy": Difficulty(
         key="easy",
         name="Easy",
         elo=200,
         depth=2,
-        diversity_window=160,
-        early_diversity_window=220,
+        diversity_window=200,
+        early_diversity_window=280,
         use_opening_book=True,
-        time_budget_ms=450,
+        time_budget_ms=400,
         description="Shallow look-ahead with wide move variety; still forgiving. ~200 chess.com.",
     ),
     "medium": Difficulty(
@@ -60,22 +61,22 @@ DIFFICULTIES: dict[str, Difficulty] = {
         name="Medium",
         elo=300,
         depth=3,
-        diversity_window=70,
-        early_diversity_window=110,
+        diversity_window=80,
+        early_diversity_window=130,
         use_opening_book=True,
-        time_budget_ms=1200,
-        description="Casual play: deeper ID and tighter move choice. ~300 chess.com.",
+        time_budget_ms=700,
+        description="Casual play: tighter move choice, short think. ~300 chess.com.",
     ),
     "hard": Difficulty(
         key="hard",
         name="Hard",
         elo=450,
         depth=4,
-        diversity_window=25,
-        early_diversity_window=45,
+        diversity_window=20,
+        early_diversity_window=35,
         use_opening_book=True,
-        time_budget_ms=2500,
-        description="Deeper search and longer think; fewer free gifts. ~450 chess.com.",
+        time_budget_ms=1000,
+        description="Deeper cap and fewer free gifts; search stops at the budget. ~450 chess.com.",
     ),
     "expert": Difficulty(
         key="expert",
@@ -85,8 +86,8 @@ DIFFICULTIES: dict[str, Difficulty] = {
         diversity_window=0,
         early_diversity_window=0,
         use_opening_book=True,
-        time_budget_ms=5000,
-        description="Deepest preset, always the best root move. ~600 chess.com, not FIDE club.",
+        time_budget_ms=1400,
+        description="Always the best completed root move. Stops at 1.4s, not a long delay. ~600 chess.com.",
     ),
 }
 

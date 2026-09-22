@@ -31,7 +31,7 @@ python -m chessmind_ab gui --difficulty medium
 
 Modes (strength gaps are intentional): `beginner` (~100, depth 1, no book), `easy` (~200, depth 2), `medium` (~300, depth 3), `hard` (~450, depth 4), `expert` (~600, depth 6, always best root move). Medium is calibrated against chess.com ~300 bots.
 
-Play mode uses **iterative deepening** with a soft time budget per difficulty (max depth still capped by the preset). Weaker tiers keep a wider root **diversity** window so they often play near-best instead of best. Easy+ use an **ECO-style opening book**; Beginner skips the book on purpose. Benchmarks keep fixed-depth search for fair comparisons.
+Play mode uses **iterative deepening** with a **hard stop** at the time budget (it will not sit through an extra ply). Higher Elo is mostly **tighter move choice** (less diversity, more depth cap), not a long delay. Easy+ use an **ECO-style opening book**; Beginner skips the book on purpose. Benchmarks keep fixed-depth search for fair comparisons.
 
 AI search runs in a **background thread** so the window should stay responsive while thinking.
 
